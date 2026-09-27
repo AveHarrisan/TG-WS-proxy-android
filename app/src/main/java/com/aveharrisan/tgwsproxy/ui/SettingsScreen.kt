@@ -1,0 +1,172 @@
+package com.aveharrisan.tgwsproxy.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import com.aveharrisan.tgwsproxy.AppSettings
+import com.aveharrisan.tgwsproxy.ProxyService
+import com.aveharrisan.tgwsproxy.R
+import com.aveharrisan.tgwsproxy.Settings
+import com.aveharrisan.tgwsproxy.core.DcIpParser
+import com.aveharrisan.tgwsproxy.core.Domains
+import com.aveharrisan.tgwsproxy.core.Level
+import com.aveharrisan.tgwsproxy.core.Log
+import kotlinx.coroutines.delay
+
+@Composable
+fun SettingsScreen(modifier: Modifier) {
+    val ctx = LocalContext.current
+    val saved by Settings.flow.collectAsState()
+    var s by remember { mutableStateOf(saved) }
+    var portText by remember { mutableStateOf(saved.port.toString()) }
+    var poolText by remember { mutableStateOf(saved.poolSize.toString()) }
+    var errors by remember { mutableStateOf<List<String>>(emptyList()) }
+    var savedNote by remember { mutableStateOf(false) }
+    LaunchedEffect(savedNote) { if (savedNote) { delay(2500); savedNote = false } }
+
+    val portErr = portText.toIntOrNull()?.takeIf { it in 1024..65535 } == null
+    val poolErr = poolText.toIntOrNull()?.takeIf { it in 0..16 } == null
+    val secretErr = !(s.secret.length == 32 && s.secret.all { it in '0'..'9' || it in 'a'..'f' })
+    val dcErr = runCatching { DcIpParser.parse(s.dcIps.lines()) }.exceptionOrNull()?.message
+    val cfErr = Domains.coerceList(s.cfDomains).firstOrNull { !Domains.isValid(it.lowercase()) }
+    val workerErr = Domains.coerceList(s.cfWorkerDomains).firstOrNull { !Domains.isValid(it.lowercase()) }
+    val tlsErr = s.fakeTlsDomain.isNotBlank() && !Domains.isValid(s.fakeTlsDomain.trim().lowercase())
+
+    Column(
+        modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineSmall)
+
+        Section(stringResource(R.string.sec_main))
+        OutlinedTextField(portText, { portText = it.filter(Char::isDigit).take(5) }, Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.label_port)) }, singleLine = true, isError = portErr,
+            supportingText = { Text(stringResource(if (portErr) R.string.err_port else R.string.hint_port)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        OutlinedTextField(s.secret, { s = s.copy(secret = it.lowercase().filter { c -> c in '0'..'9' || c in 'a'..'f' }.take(32)) },
+            Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.label_secret)) }, singleLine = true,
+            isError = secretErr, textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            supportingText = { Text(stringResource(if (secretErr) R.string.err_secret else R.string.hint_secret)) },
+            trailingIcon = { IconButton(onClick = { s = s.copy(secret = Settings.newSecret()) }) { Icon(Icons.Outlined.Refresh, null) } })
+
+        Section(stringResource(R.string.sec_dc))
+        OutlinedTextField(s.dcIps, { s = s.copy(dcIps = it) }, Modifier.fillMaxWidth(), minLines = 2,
+            label = { Text(stringResource(R.string.label_dc_ips)) }, isError = dcErr != null,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            supportingText = { Text(dcErr ?: stringResource(R.string.hint_dc_ips)) })
+        OutlinedButton(onClick = { s = s.copy(dcIps = AppSettings().dcIps) }) { Text(stringResource(R.string.btn_reset_dc)) }
+
+        Section(stringResource(R.string.sec_cf))
+        SwitchRow(stringResource(R.string.label_cf), stringResource(R.string.hint_cf), s.cfProxy) { s = s.copy(cfProxy = it) }
+        OutlinedTextField(s.cfDomains, { s = s.copy(cfDomains = it) }, Modifier.fillMaxWidth(), enabled = s.cfProxy,
+            label = { Text(stringResource(R.string.label_cf_domains)) }, isError = cfErr != null,
+            supportingText = { Text(if (cfErr != null) stringResource(R.string.err_domain, cfErr) else stringResource(R.string.hint_cf_domains)) })
+        OutlinedTextField(s.cfWorkerDomains, { s = s.copy(cfWorkerDomains = it) }, Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.label_worker)) }, isError = workerErr != null,
+            supportingText = { Text(if (workerErr != null) stringResource(R.string.err_domain, workerErr) else stringResource(R.string.hint_worker)) })
+        SwitchRow(stringResource(R.string.label_nosecure), stringResource(R.string.hint_nosecure), s.noSecure) { s = s.copy(noSecure = it) }
+
+        Section(stringResource(R.string.sec_advanced))
+        OutlinedTextField(poolText, { poolText = it.filter(Char::isDigit).take(2) }, Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.label_pool)) }, singleLine = true, isError = poolErr,
+            supportingText = { Text(stringResource(if (poolErr) R.string.err_pool else R.string.hint_pool)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        SwitchRow(stringResource(R.string.label_lan), stringResource(R.string.hint_lan), s.allowLan) { s = s.copy(allowLan = it) }
+        OutlinedTextField(s.fakeTlsDomain, { s = s.copy(fakeTlsDomain = it.trim()) }, Modifier.fillMaxWidth(), singleLine = true,
+            label = { Text(stringResource(R.string.label_faketls)) }, isError = tlsErr,
+            supportingText = { Text(stringResource(if (tlsErr) R.string.err_faketls else R.string.hint_faketls)) })
+
+        Section(stringResource(R.string.sec_behavior))
+        SwitchRow(stringResource(R.string.label_autostart), stringResource(R.string.hint_autostart), s.autostart) { s = s.copy(autostart = it) }
+        SwitchRow(stringResource(R.string.label_wakelock), stringResource(R.string.hint_wakelock), s.wakeLock) { s = s.copy(wakeLock = it) }
+        SwitchRow(stringResource(R.string.label_verbose), stringResource(R.string.hint_verbose), s.verbose) { s = s.copy(verbose = it) }
+
+        HorizontalDivider()
+        // Сводка ошибок — прямо у кнопки, чтобы не искать, что не так.
+        if (errors.isNotEmpty()) Column {
+            Text(stringResource(R.string.err_summary), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
+            errors.forEach { Text("• $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        }
+        if (savedNote) Text(stringResource(R.string.saved), color = MaterialTheme.colorScheme.primary)
+        Row {
+            OutlinedButton(onClick = {
+                s = saved; portText = saved.port.toString(); poolText = saved.poolSize.toString(); errors = emptyList()
+            }, Modifier.weight(1f)) { Text(stringResource(R.string.btn_cancel)) }
+            Spacer(Modifier.width(12.dp))
+            Button(onClick = {
+                val errs = buildList {
+                    if (portErr) add(ctx.getString(R.string.err_port))
+                    if (secretErr) add(ctx.getString(R.string.err_secret))
+                    if (dcErr != null) add(dcErr)
+                    if (cfErr != null) add(ctx.getString(R.string.err_domain, cfErr))
+                    if (workerErr != null) add(ctx.getString(R.string.err_domain, workerErr))
+                    if (poolErr) add(ctx.getString(R.string.err_pool))
+                    if (tlsErr) add(ctx.getString(R.string.err_faketls))
+                }
+                errors = errs
+                if (errs.isNotEmpty()) return@Button
+                val next = s.copy(port = portText.toInt(), poolSize = poolText.toInt())
+                val changed = next != saved
+                Settings.save(next)
+                s = next
+                Log.minLevel = if (next.verbose) Level.DEBUG else Level.INFO
+                if (changed && ProxyService.isActive) ProxyService.restart(ctx)
+                savedNote = true
+            }, Modifier.weight(1f)) { Text(stringResource(R.string.btn_save)) }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun Section(title: String) {
+    Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked, onChange)
+    }
+}
