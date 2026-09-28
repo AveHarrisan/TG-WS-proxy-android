@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -40,6 +41,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +108,7 @@ fun InfoScreen(modifier: Modifier) {
             HelpRow(R.string.info_how_title, R.string.info_how)
             HelpRow(R.string.info_setup_title, R.string.info_setup)
             HelpRow(R.string.info_trouble_title, R.string.info_trouble)
+            WorkerHelpRow()
         }
 
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -232,6 +239,38 @@ private fun ReportRow() {
         }
     }
     if (open) ReportDialog { open = false }
+}
+
+/** «Свой Cloudflare Worker» — как HelpRow, но внутри шаги с кнопками. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun WorkerHelpRow() {
+    var open by remember { mutableStateOf(false) }
+    val requested by HelpNav.openWorkerHelp.collectAsState()
+    val bring = remember { BringIntoViewRequester() }
+    // Пришли по «?» из настроек: раскрываем пункт и прокручиваем к нему.
+    LaunchedEffect(requested) {
+        if (requested) {
+            open = true
+            delay(350)
+            bring.bringIntoView()
+            HelpNav.openWorkerHelp.value = false
+        }
+    }
+    Column(Modifier.bringIntoViewRequester(bring)) {
+        Row(
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Cloud, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(14.dp))
+            Text(stringResource(R.string.worker_title), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+        }
+        AnimatedVisibility(open) {
+            WorkerGuideContent(Modifier.padding(start = 54.dp, end = 16.dp, bottom = 14.dp))
+        }
+    }
 }
 
 /** Пункт справки: заголовок кнопкой, текст раскрывается по нажатию. */

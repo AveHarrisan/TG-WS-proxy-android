@@ -86,4 +86,21 @@ class ScreensTest {
     fun settings() { Updater.setStatus(UpdateStatus.Idle); screen { SettingsScreen(Modifier) }; shot("settings") }
 
     @Test fun updatesSettings() { Updater.setStatus(UpdateStatus.Idle); screen { UpdatesScreen(Modifier) {} }; shot("updates_settings") }
+
+    @Test @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    fun aboutWorkerHelpOpened() {
+        Updater.setStatus(UpdateStatus.Idle)
+        com.aveharrisan.tgwsproxy.ui.HelpNav.openWorkerHelp.value = true
+        screen { InfoScreen(Modifier) }
+        compose.mainClock.advanceTimeBy(1000)
+        shot("about_worker_help")
+    }
+
+    @Test fun updatedCard() {
+        Updater.setStatus(UpdateStatus.Idle)
+        Updater.justUpdated.value = release.copy(version = "1.1.6")
+        screen { }
+        shot("updated_card")
+        Updater.justUpdated.value = null
+    }
 }

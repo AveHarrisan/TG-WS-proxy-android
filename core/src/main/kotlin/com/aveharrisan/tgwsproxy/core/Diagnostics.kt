@@ -16,9 +16,21 @@ object Diagnostics {
             val d = block()
             Result(method, target, true, (System.nanoTime() - t) / 1_000_000, d)
         } catch (e: Exception) {
-            Result(method, target, false, (System.nanoTime() - t) / 1_000_000, e.message ?: e.javaClass.simpleName)
+            // Тип ошибки + текст, доменами под маской: у UnknownHostException в тексте только сам адрес.
+            val detail = when (e) {
+                is java.net.UnknownHostException -> "адрес не найден (UnknownHost)"
+                else -> e.message ?: e.javaClass.simpleName
+            }
+            Result(method, target, false, (System.nanoTime() - t) / 1_000_000, DomainCensor.apply(detail))
         }
     }
+
+    /** Проверка одного Cloudflare Worker — для кнопки «Проверить» в настройках, до сохранения. */
+    fun probeWorker(domain: String, secure: Boolean, timeoutMs: Int = 7000): Result =
+        measure("CF Worker", DomainCensor.apply(domain)) {
+            RawWebSocket.connect(domain, domain, timeoutMs, CfWorkerPool.workerPath(Proto.DC_DEFAULT_IPS.getValue(2), 2),
+                secure = secure).close(); "101"
+        }
 
     fun run(config: ProxyConfig, timeoutMs: Int = 7000, onResult: (Result) -> Unit = {}): List<Result> {
         val jobs = ArrayList<Callable<Result>>()

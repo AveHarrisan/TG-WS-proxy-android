@@ -46,8 +46,9 @@ object DomainCensor {
         if (CODE_PREFIXES.any { n.startsWith(it) }) return@replace domain
         val parts = domain.split('.')
         if (parts.size < 2) return@replace domain
+        // От каждой части — первые 2 символа, остальное звёздами: имя Worker и аккаунта не читаются.
         parts.mapIndexed { i, p ->
-            if (i == parts.lastIndex) p else p.substring(0, p.length / 2) + "*".repeat(p.length - p.length / 2)
+            if (i == parts.lastIndex) p else p.take(2) + "*".repeat(maxOf(p.length - 2, 1))
         }.joinToString(".")
     }
 }

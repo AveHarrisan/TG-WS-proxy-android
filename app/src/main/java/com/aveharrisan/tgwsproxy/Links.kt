@@ -12,5 +12,7 @@ object Links {
     const val KOTAMUSIC = "https://github.com/AveHarrisan/KotaMusic"
     const val PAROKOT = "https://play.google.com/store/apps/details?id=app.parokot.ru"
     const val USB_OF_ON = "https://github.com/AveHarrisan/USB-of_on"
+    const val CLOUDFLARE_DASH = "https://dash.cloudflare.com/"
+    const val WORKER_GUIDE = "https://github.com/AveHarrisan/TG-WS-proxy-android/blob/main/docs/CfWorker.md"
     const val REPO = "https://github.com/${Updater.REPO}"
 }

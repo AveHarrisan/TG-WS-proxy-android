@@ -1,5 +1,16 @@
 package com.aveharrisan.tgwsproxy.ui
 
+import androidx.compose.foundation.layout.size
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import com.aveharrisan.tgwsproxy.core.Diagnostics
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.SystemUpdate
 import com.aveharrisan.tgwsproxy.Updater
 import androidx.compose.material3.Surface
@@ -60,12 +71,13 @@ import com.aveharrisan.tgwsproxy.core.Log
 import kotlinx.coroutines.delay
 
 @Composable
-fun SettingsScreen(modifier: Modifier) {
+fun SettingsScreen(modifier: Modifier, onOpenWorkerHelp: () -> Unit = {}) {
     var experimentalOpen by rememberSaveable { mutableStateOf(false) }
     var updatesOpen by rememberSaveable { mutableStateOf(false) }
     // Экспериментальный режим — поверх формы: форма остаётся на месте вместе с несохранёнными правками.
     Box(modifier) {
-        SettingsForm(Modifier.fillMaxSize(), onOpenExperimental = { experimentalOpen = true }, onOpenUpdates = { updatesOpen = true })
+        SettingsForm(Modifier.fillMaxSize(), onOpenExperimental = { experimentalOpen = true }, onOpenUpdates = { updatesOpen = true },
+            onOpenWorkerHelp = onOpenWorkerHelp)
         if (updatesOpen) Surface(Modifier.fillMaxSize()) {
             UpdatesScreen(Modifier) { updatesOpen = false }
         }
@@ -76,7 +88,7 @@ fun SettingsScreen(modifier: Modifier) {
 }
 
 @Composable
-private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onOpenUpdates: () -> Unit) {
+private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onOpenUpdates: () -> Unit, onOpenWorkerHelp: () -> Unit) {
     val ctx = LocalContext.current
     val saved by Settings.flow.collectAsState()
     var s by remember { mutableStateOf(saved) }
@@ -125,7 +137,10 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
             supportingText = { Text(if (cfErr != null) stringResource(R.string.err_domain, cfErr) else stringResource(R.string.hint_cf_domains)) })
         OutlinedTextField(s.cfWorkerDomains, { s = s.copy(cfWorkerDomains = it) }, Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.label_worker)) }, isError = workerErr != null,
+            // «?» — в «Справку»: как завести свой Worker.
+            trailingIcon = { IconButton(onClick = onOpenWorkerHelp) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.worker_how)) } },
             supportingText = { Text(if (workerErr != null) stringResource(R.string.err_domain, workerErr) else stringResource(R.string.hint_worker)) })
+        WorkerCheck(s.cfWorkerDomains, secure = !s.noSecure, enabled = workerErr == null)
         SwitchRow(stringResource(R.string.label_nosecure), stringResource(R.string.hint_nosecure), s.noSecure) { s = s.copy(noSecure = it) }
 
         Section(stringResource(R.string.sec_advanced))
@@ -189,6 +204,54 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 8.dp))
+}
+
+/** «Проверить» под полем Worker: проверяет то, что введено, ещё до «Сохранить». */
+@Composable
+private fun WorkerCheck(input: String, secure: Boolean, enabled: Boolean) {
+    val scope = rememberCoroutineScope()
+    val domains = remember(input) { Domains.coerceList(input) }
+    var running by remember { mutableStateOf(false) }
+    var results by remember(input) { mutableStateOf<List<Pair<String, Diagnostics.Result>>>(emptyList()) }
+    if (domains.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                running = true
+                results = emptyList()
+                scope.launch {
+                    results = withContext(Dispatchers.IO) {
+                        domains.map { d -> async { d to Diagnostics.probeWorker(d, secure) } }.awaitAll()
+                    }
+                    running = false
+                }
+            }, enabled = enabled && !running) { Text(stringResource(R.string.worker_check)) }
+            if (running) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+        }
+        results.forEach { (d, r) ->
+            Text(
+                if (r.ok) stringResource(R.string.worker_ok, d, r.ms) else stringResource(R.string.worker_fail, d, workerReason(r.detail)),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (r.ok) Color(0xFF2E9E5B) else MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+/** Почему Worker не ответил — человеческими словами; подробности — только если причина не распознана. */
+@Composable
+private fun workerReason(detail: String): String {
+    val known = when {
+        detail.contains("404") -> R.string.worker_err_404
+        detail.contains("426") || detail.contains("Expected websocket", true) -> R.string.worker_err_code
+        detail.contains("1101") || detail.contains("500") || detail.contains("502") -> R.string.worker_err_code
+        detail.contains("timed out", true) || detail.contains("timeout", true) -> R.string.worker_err_timeout
+        detail.contains("UnknownHost", true) || detail.contains("Unable to resolve", true) -> R.string.worker_err_dns
+        detail.contains("Сертификат") || detail.contains("SSL", true) -> R.string.worker_err_tls
+        else -> null
+    }
+    return if (known != null) stringResource(known)
+    else stringResource(R.string.worker_err_other) + if (detail.isNotBlank()) " ($detail)" else ""
 }
 
 @Composable

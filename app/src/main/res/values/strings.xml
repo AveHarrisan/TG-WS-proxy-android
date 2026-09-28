@@ -180,6 +180,7 @@
     <string name="upd_update_size">Обновить · %1$s</string>
     <string name="upd_installing">Устанавливается…</string>
     <string name="upd_installing_hint">Приложение закроется и откроется уже новой версией. Если Android спросит — нажмите «Обновить».</string>
+    <string name="upd_got_it">Понял</string>
     <string name="upd_done_title">Обновлено до %1$s</string>
     <string name="upd_channel">Обновления</string>
     <string name="upd_channel_desc">Сообщает о новой версии приложения</string>
@@ -215,4 +216,25 @@
     <string name="updset_r3d">через 3 дня</string>
     <string name="updset_r1w">через неделю</string>
     <string name="updset_footer">Кнопка «Проверить» в «О программе» работает всегда и снимает отложенное напоминание.</string>
+
+    <string name="worker_title">Свой Cloudflare Worker</string>
+    <string name="worker_how">Как получить свой Worker?</string>
+    <string name="worker_why">Бесплатный запасной путь, только ваш. Общие домены CF-прокси делят все пользователи — когда они перегружены, Telegram подвисает. Домен покупать не нужно.</string>
+    <string name="worker_steps">1. Зарегистрируйтесь на dash.cloudflare.com и подтвердите почту.\n2. Слева: Compute → Workers &amp; Pages.\n3. Справа вверху: Create application → Start with Hello World! → Deploy.\n4. Edit code: удалите весь код и вставьте скопированный кнопкой ниже.\n5. Deploy.\n6. Скопируйте адрес вида название.аккаунт.workers.dev.\n7. Настройки → Cloudflare → «Домены Cloudflare Worker» → вставьте → «Сохранить».\n\nПроверить: кнопка «Проверить Worker» под полем.</string>
+    <string name="worker_blocked">Если сайт Cloudflare или workers.dev у вас не открывается — настройте с другого устройства или из другой сети, это нужно один раз.</string>
+    <string name="worker_caveat">⚠️ Проверено 28.09.2026: через Worker проходят маленькие ответы Telegram, а крупные (при открытии канала) могут застревать. Проверка связи при этом зелёная. Worker пробуется первым — если после его добавления Telegram перестал грузить каналы, очистите поле Worker и сохраните.</string>
+    <string name="worker_copy">Скопировать код Worker</string>
+    <string name="worker_copied">Код Worker скопирован</string>
+    <string name="worker_open_cf">Открыть Cloudflare</string>
+    <string name="worker_full_guide">Подробная инструкция</string>
+
+    <string name="worker_check">Проверить Worker</string>
+    <string name="worker_ok">✓ %1$s — отвечает, %2$d мс</string>
+    <string name="worker_fail">✗ %1$s — %2$s</string>
+    <string name="worker_err_404">адрес открылся, но это не наш Worker: вставлен не тот код (шаг 4)</string>
+    <string name="worker_err_code">Worker отвечает, но код не тот или не сохранён — вставьте код заново и нажмите Deploy</string>
+    <string name="worker_err_timeout">не отвечает — возможно, workers.dev недоступен в этой сети</string>
+    <string name="worker_err_dns">такого адреса нет — проверьте, что скопировали его целиком</string>
+    <string name="worker_err_tls">не удалось установить защищённое соединение</string>
+    <string name="worker_err_other">не подключился</string>
 </resources>

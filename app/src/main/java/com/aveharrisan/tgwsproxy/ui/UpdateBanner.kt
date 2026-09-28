@@ -95,6 +95,9 @@ private fun UpdatedCard(release: Release) {
             }
             Column(Modifier.padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 release.notes.take(5).forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+                Button(onClick = { Updater.justUpdated.value = null }, Modifier.padding(top = 6.dp)) {
+                    Text(stringResource(R.string.upd_got_it))
+                }
             }
         }
     }

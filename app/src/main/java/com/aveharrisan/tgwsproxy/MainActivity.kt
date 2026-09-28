@@ -35,6 +35,7 @@ import com.aveharrisan.tgwsproxy.ui.AppTheme
 import com.aveharrisan.tgwsproxy.ui.InfoScreen
 import com.aveharrisan.tgwsproxy.ui.LogsScreen
 import com.aveharrisan.tgwsproxy.ui.ProxyScreen
+import com.aveharrisan.tgwsproxy.ui.HelpNav
 import com.aveharrisan.tgwsproxy.ui.SettingsScreen
 import com.aveharrisan.tgwsproxy.ui.UpdateBanner
 import com.aveharrisan.tgwsproxy.core.ReleaseNotes
@@ -77,7 +78,7 @@ class MainActivity : ComponentActivity() {
                         when (tab) {
                             0 -> ProxyScreen(m, notifGranted.value, onAskNotif = { checkNotif(ask = true) }, onOpenSettings = { tab = 1 },
                                 onBeforeStart = { checkNotif(ask = true) })
-                            1 -> SettingsScreen(m)
+                            1 -> SettingsScreen(m, onOpenWorkerHelp = { HelpNav.openWorkerHelp.value = true; tab = 3 })
                             2 -> LogsScreen(m)
                             else -> InfoScreen(m)
                         }

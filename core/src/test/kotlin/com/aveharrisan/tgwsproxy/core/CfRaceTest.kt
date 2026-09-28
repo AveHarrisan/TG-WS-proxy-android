@@ -74,3 +74,14 @@ class DomainCensorTest {
         assertTrue(!s.contains("cakeisalie.co.uk"), s)
     }
 }
+
+class WorkerDomainCensorTest {
+    @Test
+    fun workerAccountIsHidden() {
+        val s = DomainCensor.apply("CF worker myworker-1234.harrisan.workers.dev failed")
+        assertTrue(!s.contains("harrisan") && !s.contains("myworker") && !s.contains("harr"), s)
+        assertTrue(s.contains("my***********.ha******.wo*****.dev"), s)
+        // Telegram не прячем — по нему понятно, что происходит.
+        assertEquals("wss://kws2.web.telegram.org", DomainCensor.apply("wss://kws2.web.telegram.org"))
+    }
+}
