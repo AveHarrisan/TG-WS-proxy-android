@@ -98,7 +98,6 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(UpdateNotifications.EXTRA_UPDATE_NOW)
         UpdateNotifications.cancelAvailable(this)
         val release = Updater.cachedRelease(this)?.takeIf { ReleaseNotes.isNewer(it.version, BuildConfig.VERSION_NAME) } ?: return
-        Updater.dismissed.value = false
         if (!Updater.canInstall(this)) { Updater.setStatus(UpdateStatus.Available(release)); Updater.openInstallPermission(this); return }
         lifecycleScope.launch { Updater.update(applicationContext, release) }
     }

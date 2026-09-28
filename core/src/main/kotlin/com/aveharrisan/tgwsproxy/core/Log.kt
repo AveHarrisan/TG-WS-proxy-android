@@ -35,12 +35,15 @@ object Log {
 
 /** Прячет в логах домены CF-прокси, чтобы их не палили в скриншотах; telegram.org оставляем. */
 object DomainCensor {
+    private val CODE_PREFIXES = listOf("com.aveharrisan.", "java.", "javax.", "kotlin.", "kotlinx.", "android.", "androidx.", "sun.", "okhttp3.")
     private val pattern = Regex("""(?<![\w-])(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?![\w-])""")
 
     fun apply(s: String): String = pattern.replace(s) { m ->
         val domain = m.value
         val n = domain.lowercase().trimEnd('.')
         if (n == "telegram.org" || n.endsWith(".telegram.org")) return@replace domain
+        // Имена классов в текстах ошибок (com.aveharrisan…, java.net…) — не домены.
+        if (CODE_PREFIXES.any { n.startsWith(it) }) return@replace domain
         val parts = domain.split('.')
         if (parts.size < 2) return@replace domain
         parts.mapIndexed { i, p ->

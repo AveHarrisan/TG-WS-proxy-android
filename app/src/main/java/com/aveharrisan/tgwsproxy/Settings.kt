@@ -25,6 +25,8 @@ data class AppSettings(
     val verbose: Boolean = false,
     val autostart: Boolean = false,
     val wakeLock: Boolean = true,
+    /** Уведомление «Прокси работает» со значком в строке состояния. Выключено — тихое, свёрнутое. */
+    val showNotification: Boolean = true,
 ) {
     fun toConfig(): ProxyConfig = ProxyConfig(
         host = if (allowLan) "0.0.0.0" else "127.0.0.1",
@@ -73,6 +75,7 @@ object Settings {
             verbose = prefs.getBoolean("verbose", d.verbose),
             autostart = prefs.getBoolean("autostart", d.autostart),
             wakeLock = prefs.getBoolean("wakeLock", d.wakeLock),
+            showNotification = prefs.getBoolean("showNotification", d.showNotification),
         )
     }
 
@@ -91,6 +94,7 @@ object Settings {
             .putBoolean("verbose", s.verbose)
             .putBoolean("autostart", s.autostart)
             .putBoolean("wakeLock", s.wakeLock)
+            .putBoolean("showNotification", s.showNotification)
             .apply()
         _flow.value = s
     }

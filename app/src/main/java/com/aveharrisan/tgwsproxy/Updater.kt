@@ -55,8 +55,8 @@ object Updater {
     /** Меняется только в тестах — там вместо GitHub свой сервер. */
     internal var api = "https://api.github.com/repos/$REPO/releases/latest"
     private const val AUTO_CHECK_EVERY_MS = 5 * 60 * 1000L
-    /** Пока работает прокси, проверяем в фоне раз в час — как KotaMusic, пока открыт клиент. */
-    const val BACKGROUND_CHECK_EVERY_SEC = 60 * 60L
+    /** Служба заглядывает раз в 15 минут; сам запрос к GitHub — не чаще, чем задано в настройках. */
+    const val BACKGROUND_TICK_SEC = 15 * 60L
     const val ACTION_INSTALL_RESULT = "com.aveharrisan.tgwsproxy.INSTALL_RESULT"
 
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
@@ -65,8 +65,52 @@ object Updater {
     /** Для тестов: показать плашку в нужном состоянии. */
     internal fun setStatus(s: UpdateStatus) { _status.value = s }
 
-    /** Плашку закрыли кнопкой «Позже» — до следующего запуска не показываем. */
-    val dismissed = MutableStateFlow(false)
+    /** Плашку закрыли крестиком: версия и до какого времени её не показывать. */
+    val snoozed = MutableStateFlow<Pair<String, Long>?>(null)
+
+    /** Настройки обновлений: «Настройки → Обновления». */
+    data class Prefs(
+        val auto: Boolean = true,
+        val checkEveryHours: Int = 1,
+        val remindAfterHours: Int = 24,
+    )
+
+    private val _prefs = MutableStateFlow(Prefs())
+    val prefsFlow: StateFlow<Prefs> = _prefs
+
+    fun loadPrefs(ctx: Context) {
+        val p = prefs(ctx)
+        _prefs.value = Prefs(
+            auto = p.getBoolean("auto", true),
+            checkEveryHours = p.getInt("checkEveryHours", 1),
+            remindAfterHours = p.getInt("remindAfterHours", 24),
+        )
+        val v = p.getString("snoozedVersion", null)
+        val until = p.getLong("snoozedUntil", 0)
+        snoozed.value = if (v != null && until > System.currentTimeMillis()) v to until else null
+    }
+
+    fun savePrefs(ctx: Context, value: Prefs) {
+        prefs(ctx).edit().putBoolean("auto", value.auto).putInt("checkEveryHours", value.checkEveryHours)
+            .putInt("remindAfterHours", value.remindAfterHours).apply()
+        _prefs.value = value
+    }
+
+    /** Крестик на плашке: не напоминать об этой версии заданное время. Более новая версия покажется сразу. */
+    fun snooze(ctx: Context, release: Release) {
+        val until = System.currentTimeMillis() + _prefs.value.remindAfterHours * 3_600_000L
+        prefs(ctx).edit().putString("snoozedVersion", release.version).putLong("snoozedUntil", until).apply()
+        snoozed.value = release.version to until
+        UpdateNotifications.cancelAvailable(ctx)
+    }
+
+    fun isSnoozed(release: Release, now: Long = System.currentTimeMillis()): Boolean =
+        snoozed.value?.let { (v, until) -> v == release.version && now < until } == true
+
+    private fun clearSnooze(ctx: Context) {
+        prefs(ctx).edit().remove("snoozedVersion").remove("snoozedUntil").apply()
+        snoozed.value = null
+    }
 
     /** Прокси работал до установки обновления — после неё его надо запустить. Флаг одноразовый. */
     fun takeRestartFlag(ctx: Context): Boolean {
@@ -106,9 +150,13 @@ object Updater {
      * по одному разу на версию, чтобы не надоедать.
      */
     suspend fun backgroundCheck(ctx: Context) {
+        if (!_prefs.value.auto) return
+        val last = prefs(ctx).getLong("lastCheck", 0)
+        if (System.currentTimeMillis() - last < _prefs.value.checkEveryHours * 3_600_000L - 60_000L) return
         check(ctx, manual = false)
         val s = _status.value as? UpdateStatus.Available ?: return
         val p = prefs(ctx)
+        if (isSnoozed(s.release)) return
         if (p.getString("notifiedVersion", null) == s.release.version) return
         UpdateNotifications.showAvailable(ctx, s.release)
         p.edit().putString("notifiedVersion", s.release.version).apply()
@@ -116,6 +164,7 @@ object Updater {
 
     /** Проверка при открытии приложения — не чаще раза в несколько минут (лимит GitHub — 60 запросов в час). */
     suspend fun autoCheck(ctx: Context) {
+        if (!_prefs.value.auto) return
         val last = prefs(ctx).getLong("lastCheck", 0)
         val cached = cachedRelease(ctx)
         if (System.currentTimeMillis() - last < AUTO_CHECK_EVERY_MS) {
@@ -129,7 +178,7 @@ object Updater {
     suspend fun check(ctx: Context, manual: Boolean) {
         val s = _status.value
         if (s is UpdateStatus.Checking || s is UpdateStatus.Downloading || s is UpdateStatus.Installing || s is UpdateStatus.Ready) return
-        if (manual) dismissed.value = false
+        if (manual) clearSnooze(ctx)
         _status.value = UpdateStatus.Checking
         _status.value = try {
             val json = withContext(Dispatchers.IO) { fetchLatest() }

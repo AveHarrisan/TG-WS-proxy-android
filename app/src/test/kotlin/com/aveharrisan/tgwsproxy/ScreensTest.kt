@@ -10,6 +10,7 @@ import com.aveharrisan.tgwsproxy.ui.AppTheme
 import com.aveharrisan.tgwsproxy.ui.ExperimentalScreen
 import com.aveharrisan.tgwsproxy.ui.InfoScreen
 import com.aveharrisan.tgwsproxy.ui.SettingsScreen
+import com.aveharrisan.tgwsproxy.ui.UpdatesScreen
 import com.aveharrisan.tgwsproxy.ui.ProxyScreen
 import com.aveharrisan.tgwsproxy.ui.UpdateBanner
 import androidx.compose.ui.test.hasText
@@ -83,4 +84,6 @@ class ScreensTest {
 
     @Test @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
     fun settings() { Updater.setStatus(UpdateStatus.Idle); screen { SettingsScreen(Modifier) }; shot("settings") }
+
+    @Test fun updatesSettings() { Updater.setStatus(UpdateStatus.Idle); screen { UpdatesScreen(Modifier) {} }; shot("updates_settings") }
 }

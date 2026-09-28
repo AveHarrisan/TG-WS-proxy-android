@@ -1,5 +1,7 @@
 package com.aveharrisan.tgwsproxy.ui
 
+import androidx.compose.material.icons.outlined.SystemUpdate
+import com.aveharrisan.tgwsproxy.Updater
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
@@ -60,9 +62,13 @@ import kotlinx.coroutines.delay
 @Composable
 fun SettingsScreen(modifier: Modifier) {
     var experimentalOpen by rememberSaveable { mutableStateOf(false) }
+    var updatesOpen by rememberSaveable { mutableStateOf(false) }
     // Экспериментальный режим — поверх формы: форма остаётся на месте вместе с несохранёнными правками.
     Box(modifier) {
-        SettingsForm(Modifier.fillMaxSize(), onOpenExperimental = { experimentalOpen = true })
+        SettingsForm(Modifier.fillMaxSize(), onOpenExperimental = { experimentalOpen = true }, onOpenUpdates = { updatesOpen = true })
+        if (updatesOpen) Surface(Modifier.fillMaxSize()) {
+            UpdatesScreen(Modifier) { updatesOpen = false }
+        }
         if (experimentalOpen) Surface(Modifier.fillMaxSize()) {
             ExperimentalScreen(Modifier) { experimentalOpen = false }
         }
@@ -70,7 +76,7 @@ fun SettingsScreen(modifier: Modifier) {
 }
 
 @Composable
-private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit) {
+private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onOpenUpdates: () -> Unit) {
     val ctx = LocalContext.current
     val saved by Settings.flow.collectAsState()
     var s by remember { mutableStateOf(saved) }
@@ -135,8 +141,11 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit) {
         Section(stringResource(R.string.sec_behavior))
         SwitchRow(stringResource(R.string.label_autostart), stringResource(R.string.hint_autostart), s.autostart) { s = s.copy(autostart = it) }
         SwitchRow(stringResource(R.string.label_wakelock), stringResource(R.string.hint_wakelock), s.wakeLock) { s = s.copy(wakeLock = it) }
+        SwitchRow(stringResource(R.string.label_show_notif), stringResource(if (s.showNotification) R.string.hint_show_notif_on else R.string.hint_show_notif_off),
+            s.showNotification) { s = s.copy(showNotification = it) }
         SwitchRow(stringResource(R.string.label_verbose), stringResource(R.string.hint_verbose), s.verbose) { s = s.copy(verbose = it) }
         TileRow()
+        UpdatesRow(onOpenUpdates)
         ExperimentalRow(onOpenExperimental)
 
         HorizontalDivider()
@@ -180,6 +189,21 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit) {
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun UpdatesRow(onClick: () -> Unit) {
+    val p = Updater.prefsFlow.collectAsState().value
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.SystemUpdate, null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.updset_title), style = MaterialTheme.typography.bodyLarge)
+            Text(if (p.auto) stringResource(R.string.updset_row_on, p.checkEveryHours) else stringResource(R.string.updset_row_off),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable

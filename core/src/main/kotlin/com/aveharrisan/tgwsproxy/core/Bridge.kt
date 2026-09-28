@@ -79,6 +79,9 @@ class ClientConn(val socket: Socket, val input: InputStream, val output: OutputS
 }
 
 class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWorkerPool) {
+    private companion object {
+        const val CF_CONNECT_TIMEOUT_MS = 6000
+    }
 
     fun doFallback(clt: ClientConn, relayInit: ByteArray, label: String, dc: Int, isTestDc: Boolean,
                    isMedia: Boolean, ctx: CryptoCtx, splitter: MsgSplitter?): Boolean {
@@ -126,20 +129,17 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
                                 dc: Int, isMedia: Boolean, splitter: MsgSplitter?): Boolean {
         val mediaTag = if (isMedia) " media" else ""
         Log.d("[$label] DC$dc$mediaTag -> trying CF proxy")
-        var ws: RawWebSocket? = null
-        var chosen: String? = null
-        for (base in Balancer.domainsForDc(dc)) {
+        val secure = !cfg().disableSecure
+        val won = CfRace.connect(Balancer.domainsForDc(dc)) { base ->
             val domain = "kws$dc.$base"
-            try {
-                ws = RawWebSocket.connect(domain, domain, 10_000, secure = !cfg().disableSecure)
-                chosen = base
-                break
-            } catch (e: Exception) {
-                Log.w("[$label] DC$dc$mediaTag CF proxy failed: $e")
-            }
+            RawWebSocket.connect(domain, domain, CF_CONNECT_TIMEOUT_MS, secure = secure)
         }
-        if (ws == null) return false
-        if (chosen != null && Balancer.updateDomainForDc(dc, chosen)) Log.i("[$label] Switched active CF domain")
+        if (won == null) {
+            Log.w("[$label] DC$dc$mediaTag CF-прокси: ни один домен не ответил")
+            return false
+        }
+        val (chosen, ws) = won
+        if (Balancer.updateDomainForDc(dc, chosen)) Log.i("[$label] DC$dc$mediaTag CF-прокси: активный домен сменён на ${DomainCensor.apply(chosen)}")
         Stats.connectionsCfProxy.incrementAndGet()
         ws.send(relayInit)
         bridgeWs(clt, ws, label, ctx, dc, isMedia, splitter)

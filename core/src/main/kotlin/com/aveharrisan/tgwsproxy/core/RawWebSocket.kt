@@ -13,7 +13,7 @@ class WsHandshakeError(val statusCode: Int, val statusLine: String, val location
 }
 
 /** Клиентский WebSocket поверх сырого сокета: бинарные кадры, маскирование, пинг-понг. */
-class RawWebSocket private constructor(private val socket: Socket, private val input: InputStream) {
+class RawWebSocket private constructor(private val socket: Socket, private val input: InputStream) : AutoCloseable {
     private val output = BufferedOutputStream(socket.getOutputStream(), 64 * 1024)
     private val writeLock = Any()
     private val frag = java.io.ByteArrayOutputStream()
@@ -77,7 +77,7 @@ class RawWebSocket private constructor(private val socket: Socket, private val i
         return null
     }
 
-    fun close() {
+    override fun close() {
         if (closed) { runCatching { socket.close() }; return }
         closed = true
         runCatching {

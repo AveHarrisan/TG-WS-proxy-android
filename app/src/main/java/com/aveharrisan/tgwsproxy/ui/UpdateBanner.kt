@@ -3,6 +3,7 @@ package com.aveharrisan.tgwsproxy.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -55,7 +56,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun UpdateBanner(modifier: Modifier = Modifier) {
     val status by Updater.status.collectAsState()
-    val dismissed by Updater.dismissed.collectAsState()
     val release = when (val s = status) {
         is UpdateStatus.Available -> s.release
         is UpdateStatus.Downloading -> s.release
@@ -64,6 +64,8 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
         is UpdateStatus.Failed -> s.release
         else -> null
     }
+    val snoozed by Updater.snoozed.collectAsState()
+    val dismissed = release != null && snoozed?.let { (v, until) -> v == release.version && System.currentTimeMillis() < until } == true
     val updated by Updater.justUpdated.collectAsState()
     Column(modifier) {
         // Только что обновились — коротко, как KotaMusic после перезапуска.
@@ -128,7 +130,10 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
                 Spacer(Modifier.width(10.dp))
                 Text(stringResource(R.string.upd_title, release.version), Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = { Updater.dismissed.value = true }) {
+                IconButton(onClick = {
+                    Updater.snooze(ctx, release)
+                    Toast.makeText(ctx, ctx.getString(R.string.upd_snoozed, remindText(ctx, Updater.prefsFlow.value.remindAfterHours)), Toast.LENGTH_LONG).show()
+                }) {
                     Icon(Icons.Outlined.Close, stringResource(R.string.upd_later))
                 }
             }
@@ -202,6 +207,15 @@ private fun NotesDialog(release: Release, onClose: () -> Unit) {
         dismissButton = { TextButton(onClick = { openUrl(ctx, release.pageUrl) }) { Text(stringResource(R.string.upd_page)) } },
     )
 }
+
+/** «через сутки», «через час»… — для подсказки после крестика и в настройках. */
+fun remindText(ctx: Context, hours: Int): String = ctx.getString(when (hours) {
+    1 -> R.string.upd_in_hour
+    24 -> R.string.upd_in_day
+    72 -> R.string.upd_in_3days
+    168 -> R.string.upd_in_week
+    else -> R.string.upd_in_day
+})
 
 fun openUrl(ctx: Context, url: String) {
     runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

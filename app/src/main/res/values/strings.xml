@@ -185,4 +185,34 @@
     <string name="upd_channel_desc">Сообщает о новой версии приложения</string>
     <string name="upd_confirm_title">Обновление скачано</string>
     <string name="upd_confirm_text">Нажмите, чтобы установить</string>
+
+    <string name="label_show_notif">Уведомление «Прокси работает»</string>
+    <string name="hint_show_notif_on">Значок в строке состояния и статистика в шторке</string>
+    <string name="hint_show_notif_off">Без значка: уведомление тихое и свёрнуто внизу шторки. Совсем убрать его Android не даёт — без него система остановит прокси</string>
+    <string name="channel_silent_name">Работа прокси (тихо)</string>
+    <string name="channel_silent_desc">Свёрнутое уведомление без значка, когда в настройках выключено «Уведомление «Прокси работает»»</string>
+
+    <string name="upd_snoozed">Скроем обновление и напомним %1$s. Изменить — «Настройки → Обновления»</string>
+    <string name="upd_in_hour">через час</string>
+    <string name="upd_in_day">через сутки</string>
+    <string name="upd_in_3days">через 3 дня</string>
+    <string name="upd_in_week">через неделю</string>
+    <string name="updset_title">Обновления</string>
+    <string name="updset_row_on">Проверять раз в %1$d ч и при открытии</string>
+    <string name="updset_row_off">Автопроверка выключена</string>
+    <string name="updset_auto">Проверять обновления автоматически</string>
+    <string name="updset_auto_on">При открытии приложения и в фоне, пока работает прокси</string>
+    <string name="updset_auto_off">Только по кнопке «Проверить» в «О программе»</string>
+    <string name="updset_every">Проверять в фоне</string>
+    <string name="updset_every_hint">Пока работает прокси. При открытии приложения — всегда</string>
+    <string name="updset_1h">раз в час</string>
+    <string name="updset_6h">раз в 6 часов</string>
+    <string name="updset_24h">раз в сутки</string>
+    <string name="updset_remind">Напомнить после «✕» на плашке</string>
+    <string name="updset_remind_hint">Более новая версия покажется сразу</string>
+    <string name="updset_r1h">через час</string>
+    <string name="updset_r1d">через сутки</string>
+    <string name="updset_r3d">через 3 дня</string>
+    <string name="updset_r1w">через неделю</string>
+    <string name="updset_footer">Кнопка «Проверить» в «О программе» работает всегда и снимает отложенное напоминание.</string>
 </resources>

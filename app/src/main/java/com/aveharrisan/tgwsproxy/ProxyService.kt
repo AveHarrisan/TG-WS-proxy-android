@@ -65,10 +65,10 @@ class ProxyService : Service() {
                 ProxyState.startedAt.value = System.currentTimeMillis()
                 ProxyState.status.value = Status.RUNNING
                 tick = ticker.scheduleWithFixedDelay(::updateNotification, 0, 2, TimeUnit.SECONDS)
-                // Как KotaMusic: через минуту после старта и дальше раз в час, пока прокси работает.
+                // Как KotaMusic: через минуту после старта и дальше по расписанию из «Настройки → Обновления».
                 if (updateCheck == null) updateCheck = ticker.scheduleWithFixedDelay({
                     runCatching { runBlocking { Updater.backgroundCheck(applicationContext) } }
-                }, 60, Updater.BACKGROUND_CHECK_EVERY_SEC, TimeUnit.SECONDS)
+                }, 60, Updater.BACKGROUND_TICK_SEC, TimeUnit.SECONDS)
             } catch (e: java.util.concurrent.RejectedExecutionException) {
                 // Прокси остановили, пока он запускался: службы уже нет — тихо гасим то, что успело подняться.
                 server?.stop()
@@ -109,7 +109,8 @@ class ProxyService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop = PendingIntent.getService(this, 1, Intent(this, ProxyService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return NotificationCompat.Builder(this, App.CHANNEL_ID)
+        val channel = if (Settings.current.showNotification) App.CHANNEL_ID else App.CHANNEL_SILENT
+        return NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.notif_title, Settings.current.port))
             .setContentText(text)

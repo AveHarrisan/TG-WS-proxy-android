@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -45,6 +46,8 @@ class UpdaterTest {
         server.start()
         Updater.api = "$base/latest"
         Updater.setStatus(UpdateStatus.Idle)
+        // Настройки в SharedPreferences у каждого теста свои — подтягиваем их и сбрасываем «отложено».
+        Updater.loadPrefs(ctx)
     }
 
     @After
@@ -185,5 +188,35 @@ class UpdaterTest {
         Updater.setStatus(UpdateStatus.Idle)
         Updater.backgroundCheck(ctx)
         assertEquals(before + 1, nm.allNotifications.size)
+    }
+
+    @Test
+    fun snoozeHidesThisVersionOnlyForAWhile() {
+        Updater.savePrefs(ctx, Updater.Prefs(remindAfterHours = 24))
+        val r = Release("9.9.9", emptyList(), "", 1, "")
+        Updater.snooze(ctx, r)
+        assertTrue(Updater.isSnoozed(r))
+        assertFalse("через сутки напоминаем снова", Updater.isSnoozed(r, System.currentTimeMillis() + 25 * 3_600_000L))
+        assertFalse("более новая версия — сразу", Updater.isSnoozed(r.copy(version = "9.9.10")))
+        Updater.loadPrefs(ctx)
+        assertTrue("отложено переживает перезапуск", Updater.isSnoozed(r))
+    }
+
+    @Test
+    fun manualCheckClearsSnooze() = runBlocking {
+        latest = 200 to release("v9.9.9")
+        Updater.snooze(ctx, Release("9.9.9", emptyList(), "", 1, ""))
+        Updater.check(ctx, manual = true)
+        assertNull(Updater.snoozed.value)
+    }
+
+    @Test
+    fun autoOffSkipsAutomaticChecks() = runBlocking {
+        Updater.savePrefs(ctx, Updater.Prefs(auto = false))
+        latest = 200 to release("v9.9.9")
+        Updater.autoCheck(ctx)
+        Updater.backgroundCheck(ctx)
+        assertEquals(UpdateStatus.Idle, Updater.status.value)
+        Updater.savePrefs(ctx, Updater.Prefs())
     }
 }
