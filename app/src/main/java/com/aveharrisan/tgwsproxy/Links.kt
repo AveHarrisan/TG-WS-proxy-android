@@ -12,5 +12,4 @@ object Links {
     const val KOTAMUSIC = "https://github.com/AveHarrisan/KotaMusic"
     const val USB_OF_ON = "https://github.com/AveHarrisan/USB-of_on"
     const val REPO = "https://github.com/${Updater.REPO}"
-    const val FLOWSEAL = "https://github.com/Flowseal/tg-ws-proxy"
 }

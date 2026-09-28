@@ -90,7 +90,7 @@
     <string name="logs_empty">Журнал пуст. Запустите прокси.</string>
 
     <string name="info_what_title">Что это</string>
-    <string name="info_what">Локальный MTProto-прокси для Telegram. Работает прямо на телефоне: Telegram подключается к 127.0.0.1, а приложение передаёт трафик к серверам Telegram через WebSocket-подключения, как это делает веб-версия Telegram.</string>
+    <string name="info_what">Локальный MTProto-прокси для Telegram. Работает прямо на телефоне: Telegram подключается к 127.0.0.1, а приложение передаёт трафик к серверам Telegram через WebSocket-подключения, как это делает веб-версия Telegram.\n\nОсновано на наработках Flowseal.</string>
     <string name="info_how_title">Как это работает</string>
     <string name="info_how">Telegram → 127.0.0.1:1443 → TG WS Proxy → WSS → датацентр Telegram.\n\nДля датацентров из списка «DC → IP» используется прямое WebSocket-подключение. Если оно недоступно, приложение по очереди пробует Cloudflare Worker, Cloudflare-прокси и обычное TCP-подключение. Трафик шифруется самим Telegram и приложением не читается.</string>
     <string name="info_setup_title">Как подключить</string>
@@ -99,7 +99,6 @@
     <string name="info_trouble">• Нажмите «Проверить связь» — станет видно, какие пути открыты.\n• Если картинки и видео не грузятся без Premium, оставьте в «DC → IP» только строку 4:149.154.167.220.\n• Общие домены Cloudflare могут упираться в лимиты — укажите свой домен или Cloudflare Worker.\n• В журнале видно каждое подключение; кнопкой «Поделиться» его можно отправить.</string>
     <string name="disclaimer">Приложение создано в образовательных целях. Автор не несёт ответственности за действия пользователей и не призывает использовать данное приложение.</string>
     <string name="version">Версия %1$s</string>
-    <string name="credits">Использованы наработки Flowseal/tg-ws-proxy</string>
 
     <string name="upd_title">Доступна версия %1$s</string>
     <string name="upd_current">У вас %1$s. Что изменилось:</string>

@@ -39,7 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -107,10 +106,6 @@ fun InfoScreen(modifier: Modifier) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Text(stringResource(R.string.disclaimer), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        val ctx = LocalContext.current
-        TextButton(onClick = { openUrl(ctx, Links.FLOWSEAL) }, Modifier.align(Alignment.CenterHorizontally)) {
-            Text(stringResource(R.string.credits), style = MaterialTheme.typography.bodySmall)
         }
     }
 }

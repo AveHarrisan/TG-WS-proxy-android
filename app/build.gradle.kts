@@ -59,6 +59,16 @@ android {
     }
 }
 
+// LICENSE целиком (с разделом о коде Flowseal под MIT) едет внутри APK: MIT требует
+// сохранять уведомление во всех копиях программы. На экране его не видно.
+val licenseAssets = layout.buildDirectory.dir("generated/licenseAssets")
+val copyLicense = tasks.register<Copy>("copyLicense") {
+    from(rootProject.file("LICENSE")) { rename { "LICENSE.txt" } }
+    into(licenseAssets)
+}
+android.sourceSets["main"].assets.srcDir(licenseAssets)
+tasks.named("preBuild") { dependsOn(copyLicense) }
+
 base.archivesName.set("TG-WS-Proxy-${android.defaultConfig.versionName}")
 
 dependencies {
