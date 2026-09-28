@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
 import android.content.Context
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -44,6 +45,9 @@ class ProxyTileService : TileService() {
 
     private fun update() {
         val tile = qsTile ?: return
+        // Значок из манифеста система запоминает при добавлении плитки и после обновления
+        // приложения показывает старый. Задаём явно — так новая картинка подхватывается сразу.
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_notification)
         tile.state = if (ProxyState.status.value == Status.RUNNING) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         if (Build.VERSION.SDK_INT >= 29) tile.subtitle = if (tile.state == Tile.STATE_ACTIVE) ":${Settings.current.port}" else null
         tile.updateTile()
