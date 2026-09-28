@@ -32,6 +32,27 @@ object Diagnostics {
                 secure = secure).close(); "101"
         }
 
+    /**
+     * Проверка своего домена CF-прокси: для каждого датацентра — запись kws<DC>.<домен>.
+     * Так сразу видно, какой DNS-записи не хватает. Для кнопки «Проверить домен» в настройках.
+     */
+    fun probeCfDomain(base: String, secure: Boolean, timeoutMs: Int = 7000): List<Result> {
+        val pool = Executors.newFixedThreadPool(CF_DOMAIN_DCS.size)
+        try {
+            return CF_DOMAIN_DCS.map { dc ->
+                pool.submit(Callable {
+                    val d = "kws$dc.$base"
+                    measure("DC$dc", DomainCensor.apply(d)) { RawWebSocket.connect(d, d, timeoutMs, secure = secure).close(); "101" }
+                })
+            }.map { it.get((timeoutMs + 3000).toLong(), TimeUnit.MILLISECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    /** Датацентры, для которых в своём домене нужны записи kws<DC>. */
+    val CF_DOMAIN_DCS = listOf(1, 2, 3, 4, 5, 203)
+
     fun run(config: ProxyConfig, timeoutMs: Int = 7000, onResult: (Result) -> Unit = {}): List<Result> {
         val jobs = ArrayList<Callable<Result>>()
         for ((dc, ip) in config.dcRedirects) {

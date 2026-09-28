@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -108,7 +109,8 @@ fun InfoScreen(modifier: Modifier) {
             HelpRow(R.string.info_how_title, R.string.info_how)
             HelpRow(R.string.info_setup_title, R.string.info_setup)
             HelpRow(R.string.info_trouble_title, R.string.info_trouble)
-            WorkerHelpRow()
+            GuideRow(HelpTopic.CF_DOMAIN, R.string.cfdom_title, Icons.Outlined.Dns) { CfDomainGuideContent(it) }
+            GuideRow(HelpTopic.WORKER, R.string.worker_title, Icons.Outlined.Cloud) { WorkerGuideContent(it) }
         }
 
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -241,20 +243,20 @@ private fun ReportRow() {
     if (open) ReportDialog { open = false }
 }
 
-/** «Свой Cloudflare Worker» — как HelpRow, но внутри шаги с кнопками. */
+/** Пункт справки с кнопками внутри (Worker, свой домен). Открывается и по «?» из настроек. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun WorkerHelpRow() {
+private fun GuideRow(topic: HelpTopic, title: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, content: @Composable (Modifier) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val requested by HelpNav.openWorkerHelp.collectAsState()
+    val requested by HelpNav.open.collectAsState()
     val bring = remember { BringIntoViewRequester() }
     // Пришли по «?» из настроек: раскрываем пункт и прокручиваем к нему.
     LaunchedEffect(requested) {
-        if (requested) {
+        if (requested == topic) {
             open = true
             delay(350)
             bring.bringIntoView()
-            HelpNav.openWorkerHelp.value = false
+            HelpNav.open.value = null
         }
     }
     Column(Modifier.bringIntoViewRequester(bring)) {
@@ -262,14 +264,12 @@ private fun WorkerHelpRow() {
             Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Cloud, null, tint = MaterialTheme.colorScheme.primary)
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(14.dp))
-            Text(stringResource(R.string.worker_title), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(stringResource(title), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
         }
-        AnimatedVisibility(open) {
-            WorkerGuideContent(Modifier.padding(start = 54.dp, end = 16.dp, bottom = 14.dp))
-        }
+        AnimatedVisibility(open) { content(Modifier.padding(start = 54.dp, end = 16.dp, bottom = 14.dp)) }
     }
 }
 

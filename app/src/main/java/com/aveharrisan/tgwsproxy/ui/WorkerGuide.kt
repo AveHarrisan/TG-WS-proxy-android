@@ -25,6 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.aveharrisan.tgwsproxy.Links
 import com.aveharrisan.tgwsproxy.R
+import com.aveharrisan.tgwsproxy.core.Diagnostics
+import com.aveharrisan.tgwsproxy.core.Proto
+import androidx.compose.ui.text.font.FontFamily
 
 /** Как завести свой Cloudflare Worker: шаги и кнопки. Общий для «Справки» и настроек. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -54,9 +57,46 @@ fun WorkerGuideContent(modifier: Modifier = Modifier) {
     }
 }
 
-/** Просьба открыть в «Справке» пункт про Worker (значок «?» в настройках). */
+/** Какой пункт «Справки» открыть по значку «?» в настройках. */
+enum class HelpTopic { WORKER, CF_DOMAIN }
+
 object HelpNav {
-    val openWorkerHelp = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val open = kotlinx.coroutines.flow.MutableStateFlow<HelpTopic?>(null)
+}
+
+/** Свой домен CF-прокси: шаги и кнопки. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CfDomainGuideContent(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(stringResource(R.string.cfdom_why), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.cfdom_steps), style = MaterialTheme.typography.bodyMedium)
+        Text(cfDnsRecords(), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        Text(stringResource(R.string.cfdom_steps2), style = MaterialTheme.typography.bodyMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = {
+                copy(ctx, cfDnsRecords())
+                Toast.makeText(ctx, R.string.cfdom_copied, Toast.LENGTH_SHORT).show()
+            }) {
+                Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.cfdom_copy))
+            }
+            OutlinedButton(onClick = { openUrl(ctx, Links.CLOUDFLARE_DASH) }) {
+                Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.worker_open_cf))
+            }
+            OutlinedButton(onClick = { openUrl(ctx, Links.CF_DOMAIN_GUIDE) }) {
+                Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.worker_full_guide))
+            }
+        }
+    }
+}
+
+/** DNS-записи A для своего домена — из того же списка адресов, что использует прокси. */
+fun cfDnsRecords(): String = Diagnostics.CF_DOMAIN_DCS.joinToString("\n") { dc ->
+    "kws$dc".padEnd(8) + "A  " + Proto.DC_DEFAULT_IPS.getValue(dc)
 }
 
 /** Код Worker лежит в приложении (res/raw/cf_worker.js) — вставить в редактор Cloudflare. */

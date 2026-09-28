@@ -222,7 +222,7 @@
     <string name="worker_why">Бесплатный запасной путь, только ваш. Общие домены CF-прокси делят все пользователи — когда они перегружены, Telegram подвисает. Домен покупать не нужно.</string>
     <string name="worker_steps">1. Зарегистрируйтесь на dash.cloudflare.com и подтвердите почту.\n2. Слева: Compute → Workers &amp; Pages.\n3. Справа вверху: Create application → Start with Hello World! → Deploy.\n4. Edit code: удалите весь код и вставьте скопированный кнопкой ниже.\n5. Deploy.\n6. Скопируйте адрес вида название.аккаунт.workers.dev.\n7. Настройки → Cloudflare → «Домены Cloudflare Worker» → вставьте → «Сохранить».\n\nПроверить: кнопка «Проверить Worker» под полем.</string>
     <string name="worker_blocked">Если сайт Cloudflare или workers.dev у вас не открывается — настройте с другого устройства или из другой сети, это нужно один раз.</string>
-    <string name="worker_caveat">⚠️ Проверено 28.09.2026: через Worker проходят маленькие ответы Telegram, а крупные (при открытии канала) могут застревать. Проверка связи при этом зелёная. Worker пробуется первым — если после его добавления Telegram перестал грузить каналы, очистите поле Worker и сохраните.</string>
+    <string name="worker_caveat">⚠️ Проверено 28.09.2026: у части провайдеров соединения с адресами workers.dev обрываются после первых ~15 КБ. Маленькие ответы проходят, а крупные (при открытии канала) — нет, хотя проверка зелёная. Worker пробуется первым — если после его добавления каналы не грузятся, очистите поле Worker и используйте свой домен (пункт «Свой домен CF-прокси»).</string>
     <string name="worker_copy">Скопировать код Worker</string>
     <string name="worker_copied">Код Worker скопирован</string>
     <string name="worker_open_cf">Открыть Cloudflare</string>
@@ -237,4 +237,20 @@
     <string name="worker_err_dns">такого адреса нет — проверьте, что скопировали его целиком</string>
     <string name="worker_err_tls">не удалось установить защищённое соединение</string>
     <string name="worker_err_other">не подключился</string>
+
+    <string name="cfdom_title">Свой домен CF-прокси</string>
+    <string name="cfdom_why">Запасной путь до серверов Telegram через Cloudflare, только ваш. Общими доменами пользуются все сразу — когда они перегружены, Telegram подвисает. Нужен любой домен (около 150 ₽ в год), Cloudflare бесплатный.</string>
+    <string name="cfdom_steps">1. Добавьте домен в Cloudflare (купите там или смените NS-серверы у регистратора).\n2. SSL/TLS → Overview → режим Flexible.\n3. DNS → Records → + Add Record: шесть записей типа A с включённым оранжевым облачком (Proxied):</string>
+    <string name="cfdom_steps2">4. Настройки → Cloudflare → «Свои домены CF-прокси» → впишите домен (например, example.ru) → «Сохранить».\n\nПроверить: кнопка «Проверить домен» под полем.</string>
+    <string name="cfdom_copy">Скопировать DNS-записи</string>
+    <string name="cfdom_copied">DNS-записи скопированы</string>
+    <string name="cfdom_check">Проверить домен</string>
+    <string name="cfdom_ok">✓ %1$s — все %2$d записей отвечают</string>
+    <string name="cfdom_bad">✗ %1$s — не отвечают: %2$s</string>
+    <string name="cfdom_err_dns">нет такой DNS-записи — добавьте её (шаг 3)</string>
+    <string name="cfdom_err_busy">Cloudflare ответил «перегружен» (503) — попробуйте позже; у своего домена такое бывает редко</string>
+    <string name="cfdom_err_ssl">Cloudflare не может подключиться по SSL — выберите режим Flexible (шаг 2)</string>
+    <string name="cfdom_err_origin">Cloudflare не достучался до сервера — проверьте IP в записи</string>
+    <string name="cfdom_err_cert">нет сертификата — проверьте, что облачко Proxied включено и домен уже активен в Cloudflare</string>
+    <string name="cfdom_err_timeout">не отвечает — домен ещё не заработал или недоступен в этой сети</string>
 </resources>

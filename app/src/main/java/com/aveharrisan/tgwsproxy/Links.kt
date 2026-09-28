@@ -14,5 +14,6 @@ object Links {
     const val USB_OF_ON = "https://github.com/AveHarrisan/USB-of_on"
     const val CLOUDFLARE_DASH = "https://dash.cloudflare.com/"
     const val WORKER_GUIDE = "https://github.com/AveHarrisan/TG-WS-proxy-android/blob/main/docs/CfWorker.md"
+    const val CF_DOMAIN_GUIDE = "https://github.com/AveHarrisan/TG-WS-proxy-android/blob/main/docs/CfProxy.md"
     const val REPO = "https://github.com/${Updater.REPO}"
 }

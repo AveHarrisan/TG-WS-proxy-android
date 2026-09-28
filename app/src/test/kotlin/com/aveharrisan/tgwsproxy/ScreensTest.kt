@@ -90,7 +90,7 @@ class ScreensTest {
     @Test @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
     fun aboutWorkerHelpOpened() {
         Updater.setStatus(UpdateStatus.Idle)
-        com.aveharrisan.tgwsproxy.ui.HelpNav.openWorkerHelp.value = true
+        com.aveharrisan.tgwsproxy.ui.HelpNav.open.value = com.aveharrisan.tgwsproxy.ui.HelpTopic.WORKER
         screen { InfoScreen(Modifier) }
         compose.mainClock.advanceTimeBy(1000)
         shot("about_worker_help")
@@ -102,5 +102,14 @@ class ScreensTest {
         screen { }
         shot("updated_card")
         Updater.justUpdated.value = null
+    }
+
+    @Test @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    fun aboutCfDomainHelpOpened() {
+        Updater.setStatus(UpdateStatus.Idle)
+        com.aveharrisan.tgwsproxy.ui.HelpNav.open.value = com.aveharrisan.tgwsproxy.ui.HelpTopic.CF_DOMAIN
+        screen { InfoScreen(Modifier) }
+        compose.mainClock.advanceTimeBy(1000)
+        shot("about_cfdomain_help")
     }
 }

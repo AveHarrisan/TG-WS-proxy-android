@@ -71,13 +71,13 @@ import com.aveharrisan.tgwsproxy.core.Log
 import kotlinx.coroutines.delay
 
 @Composable
-fun SettingsScreen(modifier: Modifier, onOpenWorkerHelp: () -> Unit = {}) {
+fun SettingsScreen(modifier: Modifier, onOpenHelp: (HelpTopic) -> Unit = {}) {
     var experimentalOpen by rememberSaveable { mutableStateOf(false) }
     var updatesOpen by rememberSaveable { mutableStateOf(false) }
     // Экспериментальный режим — поверх формы: форма остаётся на месте вместе с несохранёнными правками.
     Box(modifier) {
         SettingsForm(Modifier.fillMaxSize(), onOpenExperimental = { experimentalOpen = true }, onOpenUpdates = { updatesOpen = true },
-            onOpenWorkerHelp = onOpenWorkerHelp)
+            onOpenHelp = onOpenHelp)
         if (updatesOpen) Surface(Modifier.fillMaxSize()) {
             UpdatesScreen(Modifier) { updatesOpen = false }
         }
@@ -88,7 +88,7 @@ fun SettingsScreen(modifier: Modifier, onOpenWorkerHelp: () -> Unit = {}) {
 }
 
 @Composable
-private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onOpenUpdates: () -> Unit, onOpenWorkerHelp: () -> Unit) {
+private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onOpenUpdates: () -> Unit, onOpenHelp: (HelpTopic) -> Unit) {
     val ctx = LocalContext.current
     val saved by Settings.flow.collectAsState()
     var s by remember { mutableStateOf(saved) }
@@ -134,11 +134,13 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
         SwitchRow(stringResource(R.string.label_cf), stringResource(R.string.hint_cf), s.cfProxy) { s = s.copy(cfProxy = it) }
         OutlinedTextField(s.cfDomains, { s = s.copy(cfDomains = it) }, Modifier.fillMaxWidth(), enabled = s.cfProxy,
             label = { Text(stringResource(R.string.label_cf_domains)) }, isError = cfErr != null,
+            trailingIcon = { IconButton(onClick = { onOpenHelp(HelpTopic.CF_DOMAIN) }) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.cfdom_title)) } },
             supportingText = { Text(if (cfErr != null) stringResource(R.string.err_domain, cfErr) else stringResource(R.string.hint_cf_domains)) })
+        CfDomainCheck(s.cfDomains, secure = !s.noSecure, enabled = cfErr == null)
         OutlinedTextField(s.cfWorkerDomains, { s = s.copy(cfWorkerDomains = it) }, Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.label_worker)) }, isError = workerErr != null,
             // «?» — в «Справку»: как завести свой Worker.
-            trailingIcon = { IconButton(onClick = onOpenWorkerHelp) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.worker_how)) } },
+            trailingIcon = { IconButton(onClick = { onOpenHelp(HelpTopic.WORKER) }) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.worker_how)) } },
             supportingText = { Text(if (workerErr != null) stringResource(R.string.err_domain, workerErr) else stringResource(R.string.hint_worker)) })
         WorkerCheck(s.cfWorkerDomains, secure = !s.noSecure, enabled = workerErr == null)
         SwitchRow(stringResource(R.string.label_nosecure), stringResource(R.string.hint_nosecure), s.noSecure) { s = s.copy(noSecure = it) }
@@ -204,6 +206,55 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 8.dp))
+}
+
+/** «Проверить домен» под полем своих доменов: по каждому датацентру — отвечает ли запись kws<DC>. */
+@Composable
+private fun CfDomainCheck(input: String, secure: Boolean, enabled: Boolean) {
+    val scope = rememberCoroutineScope()
+    val domains = remember(input) { Domains.coerceList(input) }
+    var running by remember { mutableStateOf(false) }
+    var results by remember(input) { mutableStateOf<List<Pair<String, List<Diagnostics.Result>>>>(emptyList()) }
+    if (domains.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                running = true
+                results = emptyList()
+                scope.launch {
+                    results = withContext(Dispatchers.IO) {
+                        domains.map { d -> async { d to Diagnostics.probeCfDomain(d, secure) } }.awaitAll()
+                    }
+                    running = false
+                }
+            }, enabled = enabled && !running) { Text(stringResource(R.string.cfdom_check)) }
+            if (running) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+        }
+        results.forEach { (d, rs) ->
+            val bad = rs.filter { !it.ok }
+            if (bad.isEmpty()) Text(stringResource(R.string.cfdom_ok, d, rs.size), style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E9E5B))
+            else {
+                Text(stringResource(R.string.cfdom_bad, d, bad.joinToString(", ") { "kws" + it.method.removePrefix("DC") }),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(cfDomainReason(bad.first().detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Почему запись своего домена не отвечает — по коду ответа Cloudflare. */
+@Composable
+private fun cfDomainReason(detail: String): String {
+    val known = when {
+        detail.contains("UnknownHost", true) || detail.contains("Unable to resolve", true) -> R.string.cfdom_err_dns
+        detail.contains("503") -> R.string.cfdom_err_busy
+        Regex("\\b52[5-6]\\b").containsMatchIn(detail) -> R.string.cfdom_err_ssl
+        Regex("\\b52[0-4]\\b").containsMatchIn(detail) -> R.string.cfdom_err_origin
+        detail.contains("Сертификат") || detail.contains("SSL", true) -> R.string.cfdom_err_cert
+        detail.contains("timed out", true) || detail.contains("timeout", true) -> R.string.cfdom_err_timeout
+        else -> null
+    }
+    return if (known != null) stringResource(known) else stringResource(R.string.worker_err_other) + " ($detail)"
 }
 
 /** «Проверить» под полем Worker: проверяет то, что введено, ещё до «Сохранить». */

@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
                         when (tab) {
                             0 -> ProxyScreen(m, notifGranted.value, onAskNotif = { checkNotif(ask = true) }, onOpenSettings = { tab = 1 },
                                 onBeforeStart = { checkNotif(ask = true) })
-                            1 -> SettingsScreen(m, onOpenWorkerHelp = { HelpNav.openWorkerHelp.value = true; tab = 3 })
+                            1 -> SettingsScreen(m, onOpenHelp = { topic -> HelpNav.open.value = topic; tab = 3 })
                             2 -> LogsScreen(m)
                             else -> InfoScreen(m)
                         }
