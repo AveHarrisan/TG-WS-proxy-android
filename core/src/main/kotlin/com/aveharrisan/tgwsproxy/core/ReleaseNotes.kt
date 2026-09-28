@@ -16,6 +16,19 @@ object ReleaseNotes {
         return out.map { it.replace("**", "").replace("`", "") }
     }
 
+    /** Раздел «## 1.1.7 — дата» из CHANGELOG.md: от заголовка версии до следующего «## ». */
+    fun changelogSection(changelog: String, version: String): String {
+        val lines = changelog.lines()
+        val start = lines.indexOfFirst { it.startsWith("## ") && it.removePrefix("## ").trim().substringBefore(' ') == version }
+        if (start < 0) return ""
+        val end = (start + 1 until lines.size).firstOrNull { lines[it].startsWith("## ") } ?: lines.size
+        return lines.subList(start + 1, end).joinToString("\n").trim()
+    }
+
+    /** Версия из адреса страницы выпуска: …/releases/tag/v1.1.7 → 1.1.7. */
+    fun versionFromTagUrl(url: String): String? =
+        Regex("/releases/tag/v?([0-9][0-9A-Za-z.\\-]*)").find(url)?.groupValues?.get(1)
+
     /** 1.10.0 новее 1.9.2: сравниваем по числам, а не строкой. */
     fun isNewer(candidate: String, current: String): Boolean {
         fun parts(v: String) = v.removePrefix("v").substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }

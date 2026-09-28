@@ -29,6 +29,7 @@ class UpdaterTest {
     private val base get() = server.url("").toString().trimEnd('/')
     private var latest: Pair<Int, String> = 200 to ""
     private var apkBytes = ByteArray(0)
+    private var webDown = false
 
     @Before
     fun setUp() {
@@ -36,6 +37,13 @@ class UpdaterTest {
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                // Страница «последний выпуск» и CHANGELOG — путь без лимита API.
+                "/web/latest" -> if (webDown) MockResponse().setResponseCode(500)
+                    else MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v9.9.9")
+                "/raw/v9.9.9/CHANGELOG.md" -> MockResponse().setBody("# Что менялось\n\n## 9.9.9 — 01.01.2027\n\n- Из CHANGELOG\n  с переносом\n\n## 1.0.0 — 28.09.2026\n\n- Старое\n")
+                "/web/releases/download/v9.9.9/TG-WS-Proxy.apk" ->
+                    if (request.method == "HEAD") MockResponse().setHeader("Content-Length", "123456")
+                    else MockResponse().setBody(Buffer().write(apkBytes))
                 "/latest" -> MockResponse().setResponseCode(latest.first).setBody(latest.second)
                 // Как у GitHub: ссылка на файл отвечает редиректом на хранилище.
                 "/download/app.apk" -> MockResponse().setResponseCode(302).addHeader("Location", "$base/storage/app.apk")
@@ -45,6 +53,10 @@ class UpdaterTest {
         }
         server.start()
         Updater.api = "$base/latest"
+        // Старые тесты — про API; путь через страницу выпуска проверяется отдельно ниже.
+        Updater.webLatest = ""
+        Updater.webBase = "$base/web"
+        Updater.rawBase = "$base/raw"
         Updater.setStatus(UpdateStatus.Idle)
         // Настройки в SharedPreferences у каждого теста свои — подтягиваем их и сбрасываем «отложено».
         Updater.loadPrefs(ctx)
@@ -218,5 +230,28 @@ class UpdaterTest {
         Updater.backgroundCheck(ctx)
         assertEquals(UpdateStatus.Idle, Updater.status.value)
         Updater.savePrefs(ctx, Updater.Prefs())
+    }
+
+    @Test
+    fun checkWithoutApiLimit() = runBlocking {
+        Updater.webLatest = "$base/web/latest"
+        latest = 403 to "rate limited"   // API упёрся в лимит — не должно мешать
+        Updater.check(ctx, manual = true)
+        val s = Updater.status.value
+        assertTrue("$s", s is UpdateStatus.Available)
+        s as UpdateStatus.Available
+        assertEquals("9.9.9", s.release.version)
+        assertEquals(listOf("Из CHANGELOG с переносом"), s.release.notes)
+        assertEquals("$base/web/releases/download/v9.9.9/TG-WS-Proxy.apk", s.release.apkUrl)
+        assertEquals(123456L, s.release.apkSize)
+    }
+
+    @Test
+    fun webDownFallsBackToApi() = runBlocking {
+        Updater.webLatest = "$base/web/latest"
+        webDown = true
+        latest = 200 to release("v9.9.8")
+        Updater.check(ctx, manual = true)
+        assertEquals("9.9.8", (Updater.status.value as UpdateStatus.Available).release.version)
     }
 }

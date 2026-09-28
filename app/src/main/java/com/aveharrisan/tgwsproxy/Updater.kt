@@ -52,11 +52,17 @@ sealed interface UpdateStatus {
 object Updater {
     const val REPO = "AveHarrisan/TG-WS-proxy-android"
     const val RELEASES_URL = "https://github.com/$REPO/releases"
-    /** Меняется только в тестах — там вместо GitHub свой сервер. */
+    /** Меняются только в тестах — там вместо GitHub свой сервер. */
     internal var api = "https://api.github.com/repos/$REPO/releases/latest"
+    /** Страница «последний выпуск»: GitHub отвечает переадресацией на …/releases/tag/vX.Y.Z. Лимита API у неё нет. */
+    internal var webLatest = "https://github.com/$REPO/releases/latest"
+    internal var webBase = "https://github.com/$REPO"
+    internal var rawBase = "https://raw.githubusercontent.com/$REPO"
     private const val AUTO_CHECK_EVERY_MS = 5 * 60 * 1000L
     /** Служба заглядывает раз в 15 минут; сам запрос к GitHub — не чаще, чем задано в настройках. */
     const val BACKGROUND_TICK_SEC = 15 * 60L
+    /** Имя APK в каждом выпуске — на него же ведёт кнопка «Скачать» в README. */
+    const val APK_NAME = "TG-WS-Proxy.apk"
     const val ACTION_INSTALL_RESULT = "com.aveharrisan.tgwsproxy.INSTALL_RESULT"
 
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
@@ -312,7 +318,56 @@ object Updater {
             setRequestProperty("User-Agent", "TG-WS-Proxy-Android/${BuildConfig.VERSION_NAME}")
         }
 
+    /**
+     * Сначала — без API: у api.github.com лимит 60 запросов в час на адрес, а у мобильных операторов
+     * за одним адресом тысячи абонентов. Не вышло — тогда API, как раньше.
+     */
     private fun fetchLatest(): JSONObject {
+        if (webLatest.isNotEmpty()) {
+            try {
+                return fetchLatestWeb()
+            } catch (e: Exception) {
+                Log.d("Проверка через страницу выпуска не вышла (${e.message}), пробую API")
+            }
+        }
+        return fetchLatestApi()
+    }
+
+    /** Версия — из переадресации «последний выпуск», изменения — из CHANGELOG.md этой версии, размер — из заголовков APK. */
+    private fun fetchLatestWeb(): JSONObject {
+        val c = open(webLatest)
+        c.instanceFollowRedirects = false
+        val location = try {
+            when (val code = c.responseCode) {
+                301, 302, 303, 307, 308 -> c.getHeaderField("Location") ?: throw IOException("GitHub не сказал, где выпуск")
+                404 -> throw IOException("выпусков на GitHub пока нет")
+                else -> throw IOException("GitHub ответил $code")
+            }
+        } finally {
+            c.disconnect()
+        }
+        val version = ReleaseNotes.versionFromTagUrl(location) ?: throw IOException("выпусков на GitHub пока нет")
+        val tag = "v$version"
+        val body = runCatching {
+            val cl = open("$rawBase/$tag/CHANGELOG.md")
+            try {
+                if (cl.responseCode == 200) ReleaseNotes.changelogSection(cl.inputStream.bufferedReader().use { it.readText() }, version) else ""
+            } finally { cl.disconnect() }
+        }.getOrDefault("")
+        val apkUrl = "$webBase/releases/download/$tag/$APK_NAME"
+        val size = runCatching {
+            val h = open(apkUrl)
+            try { h.requestMethod = "HEAD"; if (h.responseCode == 200) h.contentLengthLong else 0L } finally { h.disconnect() }
+        }.getOrDefault(0L)
+        // Тот же вид, что у ответа API: дальше разбор и кэш не отличают, откуда пришло.
+        return JSONObject()
+            .put("tag_name", tag)
+            .put("body", body)
+            .put("html_url", "$webBase/releases/tag/$tag")
+            .put("assets", org.json.JSONArray().put(JSONObject().put("name", APK_NAME).put("browser_download_url", apkUrl).put("size", size)))
+    }
+
+    private fun fetchLatestApi(): JSONObject {
         val c = open(api)
         c.setRequestProperty("Accept", "application/vnd.github+json")
         try {
