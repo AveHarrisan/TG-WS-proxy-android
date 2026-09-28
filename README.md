@@ -60,7 +60,7 @@ WebSocket поверх TLS. Помогает там, где прямое под�
 <img src="docs/images/links/parokot.png" width="72" height="72" alt="ПароКот"><br>
 <b>ПароКот</b>
 </a><br>
-<sub>релизы и цены<br>на игры</sub>
+<sub>Android: релизы<br>и цены на игры</sub>
 </td>
 <td align="center" width="120">
 <a href="https://discord.com/invite/XYBvdvfv8t">
