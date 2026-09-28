@@ -139,32 +139,53 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
 
     private fun connectOne(targetIp: String, domains: List<String>): RawWebSocket? {
         for (domain in domains) {
-            if (tryFrontingFirst) connectFronted(targetIp, domain)?.let { return it }
             try {
-                val ws = RawWebSocket.connect(targetIp, domain, timeoutMs = 8000)
-                tryFrontingFirst = false
-                return ws
+                return connect(targetIp, domain, 8000)
             } catch (e: WsHandshakeError) {
                 if (e.isRedirect) continue
                 return null
             } catch (e: Exception) {
-                if (RawWebSocket.isTimeout(e) || (e is java.net.SocketException && e !is java.net.ConnectException)) {
-                    if (tryFrontingFirst) return null
-                    return connectFronted(targetIp, domain)
-                }
                 return null
             }
         }
         return null
     }
 
-    private fun connectFronted(targetIp: String, domain: String): RawWebSocket? {
+    /**
+     * Подключение к датацентру: напрямую, а если не вышло — фронтингом (тот же IP, другое имя сайта в TLS).
+     * Провайдер может не только молчать (таймаут), но и обрывать TLS по имени kws*.web.telegram.org —
+     * поэтому фронтинг пробуем при любой ошибке, кроме переадресации. Если фронтинг сработал,
+     * дальше сразу идём через него, а прямой путь пробуем вторым: вдруг его снова открыли.
+     * Бросает исходную ошибку прямого подключения, если не вышло ни так, ни так.
+     */
+    fun connect(targetIp: String, domain: String, timeoutMs: Int, path: String = Proto.WS_PATH): RawWebSocket {
+        // Флаг общий для всех соединений и может смениться, пока идёт прямая попытка, —
+        // поэтому помним, пробовало ли фронтинг именно это подключение.
+        var frontedTried = false
+        if (tryFrontingFirst) {
+            frontedTried = true
+            connectFronted(targetIp, domain, timeoutMs, path)?.let { return it }
+        }
+        try {
+            val ws = RawWebSocket.connect(targetIp, domain, timeoutMs, path)
+            if (tryFrontingFirst) Log.i("Прямое WS-подключение к $targetIp снова работает")
+            tryFrontingFirst = false
+            return ws
+        } catch (e: Exception) {
+            if (e is WsHandshakeError && e.isRedirect) throw e
+            if (!frontedTried) connectFronted(targetIp, domain, timeoutMs, path)?.let { return it }
+            throw e
+        }
+    }
+
+    private fun connectFronted(targetIp: String, domain: String, timeoutMs: Int = 7000, path: String = Proto.WS_PATH): RawWebSocket? {
         val ws = try {
-            RawWebSocket.connect(targetIp, domain, timeoutMs = 7000, sni = FRONTING_SNI)
+            RawWebSocket.connect(targetIp, domain, minOf(timeoutMs, 7000), path, sni = FRONTING_SNI)
         } catch (e: Exception) {
             return null
         }
         Stats.connectionsFronting.incrementAndGet()
+        if (!tryFrontingFirst) Log.i("Прямое WS-подключение к $targetIp закрыто — работаю через фронтинг")
         tryFrontingFirst = true
         return ws
     }

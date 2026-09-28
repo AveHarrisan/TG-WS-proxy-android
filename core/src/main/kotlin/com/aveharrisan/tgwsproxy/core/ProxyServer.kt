@@ -254,7 +254,8 @@ class ProxyServer(config: ProxyConfig) {
             else for (domain in domains) {
                 Log.d("[$label] DC$dc$mediaTag -> wss://$domain$wsPath via $target")
                 try {
-                    ws = RawWebSocket.connect(target, domain, wsTimeout, wsPath)
+                    // Напрямую, а при неудаче — фронтингом (раньше фронтинг умел только пул).
+                    ws = wsPool.connect(target, domain, wsTimeout, wsPath)
                     allRedirects = false
                     break
                 } catch (e: WsHandshakeError) {
