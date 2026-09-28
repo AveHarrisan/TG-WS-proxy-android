@@ -56,6 +56,13 @@ WebSocket поверх TLS. Помогает там, где прямое под�
 <sub>канал про игры<br>и раздачи</sub>
 </td>
 <td align="center" width="120">
+<a href="https://play.google.com/store/apps/details?id=app.parokot.ru">
+<img src="docs/images/links/parokot.png" width="72" height="72" alt="ПароКот"><br>
+<b>ПароКот</b>
+</a><br>
+<sub>релизы и цены<br>на игры</sub>
+</td>
+<td align="center" width="120">
 <a href="https://discord.com/invite/XYBvdvfv8t">
 <img src="docs/images/links/discord.png" width="72" height="72" alt="Discord"><br>
 <b>Discord</b>
@@ -126,6 +133,7 @@ WebSocket поверх TLS. Помогает там, где прямое под�
 
 - **[KotaMusic](https://github.com/AveHarrisan/KotaMusic)** — мод Яндекс Музыки для компьютера
 - **[USB-of_on](https://github.com/AveHarrisan/USB-of_on)** — USB-устройства Windows: имена, скрытие, заряд
+- **[ПароКот](https://play.google.com/store/apps/details?id=app.parokot.ru)** — приложение для Android: релизы игр и слежение за ценами
 
 ## Поддержать
 

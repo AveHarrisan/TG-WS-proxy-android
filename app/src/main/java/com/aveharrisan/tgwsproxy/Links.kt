@@ -10,6 +10,7 @@ object Links {
     const val KOTAMARINE = "https://t.me/kotamarine"
     const val DISCORD = "https://discord.com/invite/XYBvdvfv8t"
     const val KOTAMUSIC = "https://github.com/AveHarrisan/KotaMusic"
+    const val PAROKOT = "https://play.google.com/store/apps/details?id=app.parokot.ru"
     const val USB_OF_ON = "https://github.com/AveHarrisan/USB-of_on"
     const val REPO = "https://github.com/${Updater.REPO}"
 }

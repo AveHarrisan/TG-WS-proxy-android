@@ -84,6 +84,7 @@ fun InfoScreen(modifier: Modifier) {
         LinkGroup {
             LinkRow(R.drawable.link_lvl, "lvl.su", R.string.link_lvl_sub, Links.LVL)
             LinkRow(R.drawable.link_kotamarine, "Котамарин", R.string.link_kotamarine_sub, Links.KOTAMARINE)
+            LinkRow(R.drawable.link_parokot, "ПароКот", R.string.link_parokot_sub, Links.PAROKOT)
             LinkRow(R.drawable.link_kotamusic, "KotaMusic", R.string.link_kotamusic_sub, Links.KOTAMUSIC)
             LinkRow(R.drawable.link_usb, "USB-of_on", R.string.link_usb_sub, Links.USB_OF_ON)
         }
