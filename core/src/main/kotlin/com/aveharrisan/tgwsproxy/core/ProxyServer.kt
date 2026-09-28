@@ -44,7 +44,11 @@ class ProxyServer(config: ProxyConfig) {
     val isRunning: Boolean get() = running
 
     private fun daemon(name: String) = ThreadFactory { r ->
-        Thread(r, "$name-${threadNo.incrementAndGet()}").apply { isDaemon = true }
+        Thread(r, "$name-${threadNo.incrementAndGet()}").apply {
+            isDaemon = true
+            // Страховка: ошибка в фоновом потоке прокси пишется в журнал, а не роняет всё приложение.
+            setUncaughtExceptionHandler { t, e -> Log.e("Ошибка в потоке ${t.name}", e) }
+        }
     }
 
     private fun now(): Double = System.nanoTime() / 1e9

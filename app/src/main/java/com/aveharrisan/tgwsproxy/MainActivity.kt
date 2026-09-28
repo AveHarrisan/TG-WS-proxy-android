@@ -50,7 +50,6 @@ class MainActivity : ComponentActivity() {
         // не нарисованного экрана на части прошивок оставляло серый экран. Спрашиваем при
         // первом «Запустить прокси» и по кнопке «Разрешить» на карточке.
         checkNotif(ask = false)
-        lifecycleScope.launch { Updater.autoCheck(applicationContext) }
         setContent {
             AppTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -88,6 +87,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkNotif(ask = false)
+        // Проверка обновлений и при возвращении в приложение, не только при холодном запуске
+        // (не чаще раза в час — это решает сам autoCheck).
+        lifecycleScope.launch { Updater.autoCheck(applicationContext) }
         // Вернулись из настроек с разрешением на установку — продолжаем без лишнего нажатия.
         val s = Updater.status.value
         if (Updater.installAfterPermission && s is UpdateStatus.Ready && Updater.canInstall(this)) {

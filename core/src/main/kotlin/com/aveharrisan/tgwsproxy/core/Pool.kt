@@ -5,6 +5,7 @@ import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
@@ -24,6 +25,8 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     private val refillFailures = ConcurrentHashMap<PoolKey, Int>()
     private val refillAfter = ConcurrentHashMap<PoolKey, Double>()
     @Volatile private var tryFrontingFirst = false
+    /** После reset() прокси останавливается: новых задач не ставим, свежие соединения закрываем. */
+    @Volatile private var closed = false
     private val idleGate = PoolIdle()
 
     private fun bucket(key: PoolKey) = idle.getOrPut(key) { ArrayDeque() }
@@ -55,8 +58,12 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
 
     private fun scheduleRefill(key: PoolKey, targetIp: String, domains: List<String>) {
         if (now() < (refillAfter[key] ?: 0.0)) return
-        if (!refilling.add(key)) return
-        io.execute { refill(key, targetIp, domains) }
+        if (closed || !refilling.add(key)) return
+        try {
+            io.execute { refill(key, targetIp, domains) }
+        } catch (e: RejectedExecutionException) {
+            refilling.remove(key)
+        }
     }
 
     private fun refill(key: PoolKey, targetIp: String, domains: List<String>) {
@@ -64,10 +71,16 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
             val b = bucket(key)
             val needed = cfg().poolSize - synchronized(b) { b.size }
             if (needed <= 0) return
-            val futures = (0 until needed).map { io.submit<RawWebSocket?> { connectOne(targetIp, domains) } }
+            val futures = try {
+                (0 until needed).map { io.submit<RawWebSocket?> { connectOne(targetIp, domains) } }
+            } catch (e: RejectedExecutionException) {
+                return
+            }
             var connected = 0
             for (f in futures) {
                 val ws = runCatching { f.get() }.getOrNull() ?: continue
+                // Прокси остановили, пока соединение открывалось, — не копим его в пуле.
+                if (closed) { runCatching { ws.close() }; continue }
                 synchronized(b) { b.addLast(Entry(ws, now())) }
                 connected++
                 scheduleRotation(key, targetIp, domains)
@@ -87,9 +100,13 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     }
 
     private fun scheduleRotation(key: PoolKey, targetIp: String, domains: List<String>) {
-        if (rotating.containsKey(key)) return
-        rotating[key] = sched.scheduleWithFixedDelay({ rotate(key, targetIp, domains) },
-            CHECK_INTERVAL_MS, CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        if (closed || rotating.containsKey(key)) return
+        try {
+            rotating[key] = sched.scheduleWithFixedDelay({ rotate(key, targetIp, domains) },
+                CHECK_INTERVAL_MS, CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        } catch (e: RejectedExecutionException) {
+            // Планировщик уже выключен: прокси остановлен.
+        }
     }
 
     private fun rotate(key: PoolKey, targetIp: String, domains: List<String>) {
@@ -99,8 +116,8 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         // чтобы не будить сеть пересозданием соединений. Первый же get() разбудит его.
         if (idleGate.shouldSleep(t, idleSleepSec)) {
             rotating.remove(key)?.cancel(false)
-            val closed = synchronized(b) { ArrayList(b).also { b.clear() } }
-            closed.forEach { quietClose(it.ws) }
+            val dropped = synchronized(b) { ArrayList(b).also { b.clear() } }
+            dropped.forEach { quietClose(it.ws) }
             if (idleGate.fallAsleep()) Log.i("WS pool уснул: ${idleSleepSec.toInt()} с без новых соединений")
             return
         }
@@ -153,6 +170,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     }
 
     fun warmup() {
+        closed = false
         val c = cfg()
         for ((dc, ip) in c.dcRedirects) for (isMedia in listOf(false, true))
             scheduleRefill(PoolKey(dc, isMedia), ip, Proto.wsDomains(dc, isMedia))
@@ -160,6 +178,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     }
 
     fun reset() {
+        closed = true
         rotating.values.forEach { it.cancel(false) }
         rotating.clear()
         idle.values.forEach { b -> synchronized(b) { b.forEach { quietClose(it.ws) }; b.clear() } }
@@ -170,7 +189,9 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         tryFrontingFirst = false
     }
 
-    private fun quietClose(ws: RawWebSocket) { io.execute { runCatching { ws.close() } } }
+    private fun quietClose(ws: RawWebSocket) {
+        try { io.execute { runCatching { ws.close() } } } catch (e: RejectedExecutionException) { runCatching { ws.close() } }
+    }
 
     companion object {
         const val MAX_AGE = 120.0
@@ -207,12 +228,13 @@ class CfWorkerPool(private val cfg: () -> ProxyConfig, private val io: ExecutorS
 
     private val idle = ConcurrentHashMap<Int, ArrayDeque<Entry>>()
     private val refilling = ConcurrentHashMap.newKeySet<Int>()
+    @Volatile private var closed = false
 
     fun get(dc: Int, fallbackDst: String, workerDomains: List<String>): Pair<RawWebSocket, String>? {
         val b = idle.getOrPut(dc) { ArrayDeque() }
         while (true) {
             val e = synchronized(b) { b.pollFirst() } ?: break
-            if (now() - e.created > MAX_AGE || !e.ws.isAlive) { io.execute { runCatching { e.ws.close() } }; continue }
+            if (now() - e.created > MAX_AGE || !e.ws.isAlive) { runCatching { e.ws.close() }; continue }
             Stats.cfPoolHits.incrementAndGet()
             scheduleRefill(dc, fallbackDst, workerDomains)
             return e.ws to e.domain
@@ -222,18 +244,21 @@ class CfWorkerPool(private val cfg: () -> ProxyConfig, private val io: ExecutorS
     }
 
     private fun scheduleRefill(dc: Int, dst: String, domains: List<String>) {
-        if (!refilling.add(dc)) return
-        io.execute {
+        if (closed || !refilling.add(dc)) return
+        try { io.execute {
             try {
                 val b = idle.getOrPut(dc) { ArrayDeque() }
                 val needed = minOf(cfg().poolSize, PER_DC_LIMIT) - synchronized(b) { b.size }
                 repeat(maxOf(needed, 0)) {
                     val (ws, domain) = connectOne(domains, dst, dc) ?: return@execute
+                    if (closed) { runCatching { ws.close() }; return@execute }
                     synchronized(b) { b.addLast(Entry(ws, now(), domain)) }
                 }
             } finally {
                 refilling.remove(dc)
             }
+        } } catch (e: RejectedExecutionException) {
+            refilling.remove(dc)
         }
     }
 
@@ -252,6 +277,7 @@ class CfWorkerPool(private val cfg: () -> ProxyConfig, private val io: ExecutorS
     fun availableDomains(domains: List<String>): List<String> = domains.distinct().shuffled()
 
     fun warmup() {
+        closed = false
         val c = cfg()
         if (c.cfProxyWorkerDomains.isEmpty()) return
         val targets = Proto.DC_DEFAULT_IPS.filterKeys { it !in c.dcRedirects }
@@ -261,6 +287,7 @@ class CfWorkerPool(private val cfg: () -> ProxyConfig, private val io: ExecutorS
     }
 
     fun reset() {
+        closed = true
         idle.values.forEach { b -> synchronized(b) { b.forEach { runCatching { it.ws.close() } }; b.clear() } }
         idle.clear()
         refilling.clear()

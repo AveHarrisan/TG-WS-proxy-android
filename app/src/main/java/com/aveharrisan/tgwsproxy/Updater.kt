@@ -50,7 +50,7 @@ object Updater {
     const val RELEASES_URL = "https://github.com/$REPO/releases"
     /** Меняется только в тестах — там вместо GitHub свой сервер. */
     internal var api = "https://api.github.com/repos/$REPO/releases/latest"
-    private const val AUTO_CHECK_EVERY_MS = 6 * 60 * 60 * 1000L
+    private const val AUTO_CHECK_EVERY_MS = 60 * 60 * 1000L
 
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
     val status: StateFlow<UpdateStatus> = _status
