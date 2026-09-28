@@ -43,6 +43,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".StartProxyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".ProxyService"
             android:exported="false"

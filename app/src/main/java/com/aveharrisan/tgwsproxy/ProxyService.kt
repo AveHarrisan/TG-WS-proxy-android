@@ -146,12 +146,22 @@ class ProxyService : Service() {
             ContextCompat.startForegroundService(ctx, Intent(ctx, ProxyService::class.java).setAction(ACTION_RESTART))
         }
 
-        fun start(ctx: Context) {
+        /**
+         * false — система не дала запустить службу. На Android 12+ так бывает, когда приложение
+         * не на экране (например, нажатие на плитку в шторке на Android 14+ у части прошивок).
+         */
+        fun start(ctx: Context): Boolean = try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, ProxyService::class.java))
+            true
+        } catch (e: IllegalStateException) {
+            // ForegroundServiceStartNotAllowedException — наследник IllegalStateException.
+            Log.w("Система не дала запустить прокси из фона: ${e.javaClass.simpleName}")
+            false
         }
 
+        /** stopService разрешён всегда, в отличие от startService из фона. Прокси гасится в onDestroy. */
         fun stop(ctx: Context) {
-            ctx.startService(Intent(ctx, ProxyService::class.java).setAction(ACTION_STOP))
+            ctx.stopService(Intent(ctx, ProxyService::class.java))
         }
 
         val isActive: Boolean get() = ProxyState.status.value.let { it == Status.RUNNING || it == Status.STARTING }
