@@ -24,11 +24,13 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     private val refillFailures = ConcurrentHashMap<PoolKey, Int>()
     private val refillAfter = ConcurrentHashMap<PoolKey, Double>()
     @Volatile private var tryFrontingFirst = false
+    private val idleGate = PoolIdle()
 
     private fun bucket(key: PoolKey) = idle.getOrPut(key) { ArrayDeque() }
 
     fun get(dc: Int, isMedia: Boolean, targetIp: String, domains: List<String>): RawWebSocket? {
         val key = PoolKey(dc, isMedia)
+        if (idleGate.markDemand(now())) Log.i("WS pool проснулся: Telegram открыл новое соединение")
         val b = bucket(key)
         while (true) {
             val e = synchronized(b) { b.pollFirst() } ?: break
@@ -93,6 +95,15 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     private fun rotate(key: PoolKey, targetIp: String, domains: List<String>) {
         val b = idle[key] ?: return
         val t = now()
+        // Экспериментально: Telegram давно не открывал новых соединений — пул засыпает,
+        // чтобы не будить сеть пересозданием соединений. Первый же get() разбудит его.
+        if (idleGate.shouldSleep(t, idleSleepSec)) {
+            rotating.remove(key)?.cancel(false)
+            val closed = synchronized(b) { ArrayList(b).also { b.clear() } }
+            closed.forEach { quietClose(it.ws) }
+            if (idleGate.fallAsleep()) Log.i("WS pool уснул: ${idleSleepSec.toInt()} с без новых соединений")
+            return
+        }
         val expired = ArrayList<RawWebSocket>()
         val size = synchronized(b) {
             val it = b.iterator()
@@ -164,8 +175,30 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     companion object {
         const val MAX_AGE = 120.0
         const val CHECK_INTERVAL_MS = 5000L
+
+        /** Через сколько секунд без новых соединений пул засыпает; 0 — никогда (как в оригинале). */
+        @Volatile var idleSleepSec: Double = 0.0
         const val FRONTING_SNI = "sprinthost.ru"
     }
+}
+
+/** Когда пул засыпает и просыпается. Отдельно от сети, чтобы проверять тестами. */
+internal class PoolIdle {
+    @Volatile private var lastDemand = System.nanoTime() / 1e9
+    @Volatile private var asleep = false
+
+    /** Новое соединение от Telegram. true — пул спал и сейчас проснулся. */
+    fun markDemand(t: Double): Boolean {
+        lastDemand = t
+        val wasAsleep = asleep
+        asleep = false
+        return wasAsleep
+    }
+
+    fun shouldSleep(t: Double, idleSec: Double): Boolean = idleSec > 0 && t - lastDemand >= idleSec
+
+    /** true — только что уснул (чтобы писать в журнал один раз). */
+    fun fallAsleep(): Boolean = !asleep.also { asleep = true }
 }
 
 /** Пул соединений к Cloudflare Worker (по одному на DC). */

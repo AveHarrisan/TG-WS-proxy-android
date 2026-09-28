@@ -1,5 +1,10 @@
 package com.aveharrisan.tgwsproxy.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.aveharrisan.tgwsproxy.Experimental
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +57,8 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SettingsScreen(modifier: Modifier) {
+    var experimentalOpen by rememberSaveable { mutableStateOf(false) }
+    if (experimentalOpen) { ExperimentalScreen(modifier) { experimentalOpen = false }; return }
     val ctx = LocalContext.current
     val saved by Settings.flow.collectAsState()
     var s by remember { mutableStateOf(saved) }
@@ -118,6 +125,7 @@ fun SettingsScreen(modifier: Modifier) {
         SwitchRow(stringResource(R.string.label_wakelock), stringResource(R.string.hint_wakelock), s.wakeLock) { s = s.copy(wakeLock = it) }
         SwitchRow(stringResource(R.string.label_verbose), stringResource(R.string.hint_verbose), s.verbose) { s = s.copy(verbose = it) }
         TileRow()
+        ExperimentalRow { experimentalOpen = true }
 
         HorizontalDivider()
         // Сводка ошибок — прямо у кнопки, чтобы не искать, что не так.
@@ -160,6 +168,21 @@ fun SettingsScreen(modifier: Modifier) {
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun ExperimentalRow(onClick: () -> Unit) {
+    val on = Experimental.flow.collectAsState().value.any
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Science, null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.exp_title), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(if (on) R.string.exp_row_on else R.string.exp_row_off), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable

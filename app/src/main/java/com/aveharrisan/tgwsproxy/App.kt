@@ -12,6 +12,7 @@ class App : Application() {
         super.onCreate()
         LogFile.init(this)
         Settings.init(this)
+        Experimental.init(this)
         TileAdder.init(this)
         ProxyState.attachLog()
         // На Android системный верификатор имён — полноценный, подключаем его вторым рубежом.

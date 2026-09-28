@@ -7,7 +7,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.aveharrisan.tgwsproxy.ui.AppTheme
+import com.aveharrisan.tgwsproxy.ui.ExperimentalScreen
 import com.aveharrisan.tgwsproxy.ui.InfoScreen
+import com.aveharrisan.tgwsproxy.ui.SettingsScreen
 import com.aveharrisan.tgwsproxy.ui.ProxyScreen
 import com.aveharrisan.tgwsproxy.ui.UpdateBanner
 import androidx.compose.ui.test.hasText
@@ -70,4 +72,15 @@ class ScreensTest {
         compose.waitUntilAtLeastOneExists(hasText("Задача на GitHub"), timeoutMillis = 60_000)
         captureScreenRoboImage("build/screens/report.png")
     }
+
+    @Test fun experimental() {
+        Updater.setStatus(UpdateStatus.Idle)
+        Experimental.set(ExperimentalFlags(poolSleep = true))
+        screen { ExperimentalScreen(Modifier) {} }
+        shot("experimental")
+        Experimental.set(ExperimentalFlags())
+    }
+
+    @Test @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    fun settings() { Updater.setStatus(UpdateStatus.Idle); screen { SettingsScreen(Modifier) }; shot("settings") }
 }

@@ -116,9 +116,17 @@ class ProxyService : Service() {
     }
 
     @SuppressLint("MissingPermission")
+    private var lastNotifText: String? = null
+
     private fun updateNotification() {
         val text = getString(R.string.notif_stats, Stats.connectionsActive.get(),
             humanBytes(Stats.bytesUp.get()), humanBytes(Stats.bytesDown.get()))
+        if (Experimental.current.quietNotification) {
+            // Экран выключен — уведомление никто не видит; цифры те же — перерисовывать нечего.
+            val screenOn = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+            if (!screenOn || text == lastNotifText) return
+        }
+        lastNotifText = text
         runCatching { androidx.core.app.NotificationManagerCompat.from(this).notify(NOTIF_ID, buildNotification(text)) }
     }
 
@@ -126,6 +134,8 @@ class ProxyService : Service() {
     private fun acquireLocks() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TgWsProxy::proxy").apply { setReferenceCounted(false); acquire() }
+        // Экспериментально: без блокировки Wi-Fi — радиомодуль сам экономит заряд между пакетами.
+        if (Experimental.current.wifiPowerSave) return
         val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val mode = if (Build.VERSION.SDK_INT >= 29) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
         wifiLock = wm.createWifiLock(mode, "TgWsProxy::wifi").apply { setReferenceCounted(false); acquire() }

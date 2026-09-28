@@ -48,6 +48,8 @@ class BugReport(val head: String, val log: List<String>, val file: File) {
                 appendLine("- Порт ${s.port}, DC→IP: ${s.dcIps.lines().filter { it.isNotBlank() }.joinToString(", ")}")
                 appendLine("- CF-прокси: ${yesNo(s.cfProxy)}, свои домены: ${if (s.cfDomains.isBlank()) "нет" else "есть"}, Worker: ${if (s.cfWorkerDomains.isBlank()) "нет" else "есть"}")
                 appendLine("- Пул ${s.poolSize}, без TLS: ${yesNo(s.noSecure)}, доступ из сети: ${yesNo(s.allowLan)}, Fake TLS: ${yesNo(s.fakeTlsDomain.isNotBlank())}, автозапуск: ${yesNo(s.autostart)}")
+                val x = Experimental.current
+                appendLine("- Эксперимент: пул засыпает: ${yesNo(x.poolSleep)}, тихое уведомление: ${yesNo(x.quietNotification)}, Wi-Fi с энергосбережением: ${yesNo(x.wifiPowerSave)}, не засыпать: ${yesNo(s.wakeLock)}")
                 if (probe.isNotEmpty()) {
                     appendLine()
                     appendLine("### Проверка связи")
