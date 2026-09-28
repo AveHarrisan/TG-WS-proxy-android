@@ -27,49 +27,49 @@ WebSocket поверх TLS. Помогает там, где прямое под�
 
 <table>
 <tr>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://boosty.to/aveharrisan">
 <img src="docs/images/links/boosty.png" width="72" height="72" alt="Boosty"><br>
 <b>Boosty</b>
 </a><br>
 <sub>разово или подпиской</sub>
 </td>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://www.donationalerts.com/r/aveharrisan">
-<img src="https://img.shields.io/badge/DA-%20-F57D07?style=for-the-badge&logo=donationalerts&logoColor=white" height="72" alt="DonationAlerts"><br>
+<img src="docs/images/links/donationalerts.png" width="72" height="72" alt="DonationAlerts"><br>
 <b>DonationAlerts</b>
 </a><br>
 <sub>разовый донат<br>без подписки</sub>
 </td>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://lvl.su/">
 <img src="docs/images/links/lvl.png" width="72" height="72" alt="lvl.su"><br>
 <b>lvl.su</b>
 </a><br>
 <sub>гайды и вики</sub>
 </td>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://t.me/kotamarine">
 <img src="docs/images/links/kotamarine.png" width="72" height="72" alt="Котамарин"><br>
 <b>Котамарин</b>
 </a><br>
 <sub>канал про игры<br>и раздачи</sub>
 </td>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://play.google.com/store/apps/details?id=app.parokot.ru">
 <img src="docs/images/links/parokot.png" width="72" height="72" alt="ПароКот"><br>
 <b>ПароКот</b>
 </a><br>
 <sub>приложение для Android:<br>релизы и цены на игры</sub>
 </td>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://discord.com/invite/XYBvdvfv8t">
 <img src="docs/images/links/discord.png" width="72" height="72" alt="Discord"><br>
 <b>Discord</b>
 </a><br>
 <sub>вопросы и ошибки</sub>
 </td>
-<td align="center" width="120">
+<td align="center" valign="top" width="120">
 <a href="https://t.me/aveharrisan">
 <img src="docs/images/links/aveharrisan.png" width="72" height="72" alt="AveHarrisan"><br>
 <b>AveHarrisan</b>
