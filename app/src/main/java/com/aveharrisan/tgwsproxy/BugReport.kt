@@ -17,13 +17,23 @@ import java.util.Date
 import java.util.Locale
 
 /** Отчёт для разбора проблемы: устройство, настройки без секрета, проверка связи и журнал. */
-class BugReport(val head: String, val log: List<String>, val file: File) {
+class BugReport(val head: String, val log: List<String>, val file: File, private val issueHead: String = head) {
     val fullText: String get() = file.readText()
 
-    fun issueLink(): IssueReport.Link = IssueReport.issueUrl(Updater.REPO, "Проблема: ", head, log)
+    fun issueLink(): IssueReport.Link = IssueReport.issueUrl(Updater.REPO, issueTitle(), issueHead, log)
 
     companion object {
         private const val LOG_LINES = 3000
+
+        /** Видимая подсказка в начале задачи: сюда человек пишет, что случилось. */
+        const val PROBLEM_PLACEHOLDER = "✏️ Опишите проблему здесь: что делали, что ожидали и что пошло не так."
+
+        /** Не пустой заголовок: сразу видно версию и телефон. */
+        fun issueTitle() = "Проблема: ${BuildConfig.VERSION_NAME}, ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}"
+
+        /** Падение из прошлой версии к текущей проблеме не относится — показываем только своё. */
+        private fun currentCrash(): String? =
+            LogFile.lastCrash()?.takeIf { it.lineSequence().firstOrNull()?.contains("версия ${BuildConfig.VERSION_NAME},") == true }
 
         /** Долго: проверка связи ждёт ответа до нескольких секунд. Звать не с главного потока. */
         fun collect(ctx: Context, withProbe: Boolean = true, onStep: (String) -> Unit = {}): BugReport {
@@ -34,7 +44,8 @@ class BugReport(val head: String, val log: List<String>, val file: File) {
             onStep("Собираем журнал…")
             val s = Settings.current
             val head = IssueReport.mask(buildString {
-                appendLine("**Что случилось:** <!-- опишите своими словами: что делали и что пошло не так -->")
+                appendLine("### Что случилось")
+                appendLine(PROBLEM_PLACEHOLDER)
                 appendLine()
                 appendLine("### Устройство")
                 appendLine("- Приложение: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})${if (BuildConfig.DEBUG) ", отладочная сборка" else ""}")
@@ -55,13 +66,42 @@ class BugReport(val head: String, val log: List<String>, val file: File) {
                     appendLine("### Проверка связи")
                     probe.forEach { appendLine("- ${if (it.ok) "✅" else "❌"} ${it.method} · ${it.target} — ${if (it.ok) "${it.ms} мс" else it.detail}") }
                 }
-                LogFile.lastCrash()?.let {
+                currentCrash()?.let {
                     appendLine()
                     appendLine("### Последнее падение")
                     appendLine("```")
                     appendLine(it.lines().take(25).joinToString("\n"))
                     appendLine("```")
                 }
+            })
+            val x = Experimental.current
+            val issueHead = IssueReport.mask(buildString {
+                appendLine("### Что случилось")
+                appendLine(PROBLEM_PLACEHOLDER)
+                appendLine()
+                appendLine("### Устройство")
+                appendLine("- Приложение: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("- Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}, сеть: ${network(ctx)}")
+                appendLine("- Уведомления: ${yesNo(notifOk(ctx))}, без экономии батареи: ${yesNo(batteryOk(ctx))}, кнопка в шторке: ${yesNo(TileAdder.added.value)}")
+                appendLine()
+                appendLine("### Прокси")
+                appendLine("- ${ProxyState.status.value}${ProxyState.error.value?.let { " — $it" } ?: ""}; ${Stats.summary()}")
+                appendLine("- Порт ${s.port}, DC→IP: ${s.dcIps.lines().filter { it.isNotBlank() }.joinToString(", ")}; CF: ${yesNo(s.cfProxy)}, пул ${s.poolSize}, автозапуск: ${yesNo(s.autostart)}, не засыпать: ${yesNo(s.wakeLock)}")
+                if (x.any) appendLine("- Эксперимент: пул засыпает: ${yesNo(x.poolSleep)}, тихое уведомление: ${yesNo(x.quietNotification)}, Wi-Fi: ${yesNo(x.wifiPowerSave)}")
+                if (probe.isNotEmpty()) {
+                    appendLine()
+                    appendLine("### Проверка связи")
+                    IssueReport.probeSummary(probe).forEach { appendLine("- $it") }
+                }
+                currentCrash()?.let {
+                    appendLine()
+                    appendLine("### Падение")
+                    appendLine("```")
+                    appendLine(it.lines().take(8).joinToString("\n"))
+                    appendLine("```")
+                }
+                appendLine()
+                appendLine("_Полный отчёт с журналом — файлом: «Сообщить о проблеме» → «Отправить файлом»._")
             })
             val log = LogFile.tail(LOG_LINES).map(IssueReport::mask)
 
@@ -70,7 +110,7 @@ class BugReport(val head: String, val log: List<String>, val file: File) {
             val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date())
             val file = File(dir, "tg-ws-proxy-report_$stamp.txt")
             file.writeText(head + "\n### Журнал\n" + log.joinToString("\n") + "\n")
-            return BugReport(head, log, file)
+            return BugReport(head, log, file, issueHead)
         }
 
         private fun yesNo(b: Boolean) = if (b) "да" else "нет"

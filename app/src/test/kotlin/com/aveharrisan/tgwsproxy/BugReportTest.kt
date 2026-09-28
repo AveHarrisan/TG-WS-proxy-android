@@ -33,5 +33,7 @@ class BugReportTest {
         val body = URLDecoder.decode(link.url.substringAfter("&body="), "UTF-8")
         assertTrue(body.contains("проверочная строка журнала"))
         assertFalse(body.contains(secret))
+        assertTrue("подсказка, куда писать", body.startsWith("### Что случилось\n" + BugReport.PROBLEM_PLACEHOLDER))
+        assertTrue("заголовок не пустой", java.net.URLDecoder.decode(link.url.substringAfter("title=").substringBefore("&body="), "UTF-8").length > "Проблема: ".length)
     }
 }

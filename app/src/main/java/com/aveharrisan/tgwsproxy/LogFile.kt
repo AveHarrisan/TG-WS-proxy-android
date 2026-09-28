@@ -52,6 +52,11 @@ object LogFile {
     /** Текст последнего падения, если оно было. */
     fun lastCrash(): String? = if (::dir.isInitialized && crash.exists()) runCatching { crash.readText() }.getOrNull() else null
 
+    /** После обновления старое падение к новой версии не относится. */
+    fun clearCrash() {
+        if (::dir.isInitialized) crash.delete()
+    }
+
     private fun installCrashHandler() {
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->

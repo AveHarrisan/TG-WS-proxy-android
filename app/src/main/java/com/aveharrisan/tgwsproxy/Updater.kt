@@ -92,6 +92,7 @@ object Updater {
             val cached = cachedRelease(ctx)?.takeIf { it.version == BuildConfig.VERSION_NAME }
             justUpdated.value = cached ?: Release(BuildConfig.VERSION_NAME, emptyList(), "", 0, RELEASES_URL)
             File(ctx.cacheDir, "updates").listFiles()?.forEach { it.delete() }
+            LogFile.clearCrash()
             Log.i("Обновлено: $last → ${BuildConfig.VERSION_NAME}")
         }
         if (last != BuildConfig.VERSION_NAME) p.edit().putString("lastRunVersion", BuildConfig.VERSION_NAME).apply()

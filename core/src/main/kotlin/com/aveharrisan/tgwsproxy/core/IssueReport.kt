@@ -17,6 +17,20 @@ object IssueReport {
      */
     class Link(val url: String, val logLines: Int, val trimmed: Boolean)
 
+    /**
+     * Проверка связи коротко — по строке на способ: «TCP напрямую: 0 из 6». Ссылка на задачу
+     * ограничена по длине, а русская буква в ней занимает 6 знаков: подробности — в файле отчёта.
+     */
+    fun probeSummary(results: List<Diagnostics.Result>): List<String> =
+        results.groupBy { it.method }.map { (method, rs) ->
+            val ok = rs.count { it.ok }
+            val details = rs.joinToString(", ") { r ->
+                val where = r.target.substringBefore(' ')
+                if (r.ok) "$where ${r.ms} мс" else "$where ✗"
+            }
+            "$method: $ok из ${rs.size} ($details)"
+        }
+
     fun issueUrl(repo: String, title: String, head: String, log: List<String>, maxUrl: Int = 7000): Link {
         fun build(lines: List<String>): String {
             val body = buildString {
