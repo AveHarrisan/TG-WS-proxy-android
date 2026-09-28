@@ -94,7 +94,10 @@ fun ProxyScreen(modifier: Modifier, notifGranted: Boolean, onAskNotif: () -> Uni
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Column {
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.by_author), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
 
         StatusCard(status, error, settings.port)
 

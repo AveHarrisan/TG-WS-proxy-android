@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TG WS Proxy</string>
+    <string name="by_author">By Harrisan</string>
     <string name="tile_label">TG Proxy</string>
     <string name="channel_name">Работа прокси</string>
     <string name="channel_desc">Постоянное уведомление, пока прокси запущен</string>

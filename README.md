@@ -1,6 +1,80 @@
+<div align="center">
+
 # TG WS Proxy для Android
 
-Локальный MTProto-прокси для Telegram на телефоне. Приложение принимает подключение от Telegram на `127.0.0.1` и передаёт трафик до серверов Telegram через WebSocket поверх TLS (`kws*.web.telegram.org`). Там, где прямое подключение к серверам Telegram заблокировано, это помогает Telegram снова подключаться.
+**By Harrisan**
+
+Локальный MTProto-прокси для Telegram на телефоне: Telegram подключается
+к `127.0.0.1`, а приложение передаёт трафик к серверам Telegram через
+WebSocket поверх TLS. Помогает там, где прямое подключение заблокировано.
+
+[![Discord](https://img.shields.io/badge/Discord-Сервер-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.com/invite/XYBvdvfv8t)
+[![Сайт](https://img.shields.io/badge/Сайт-lvl.su-ff5c5c?style=flat-square)](https://lvl.su/)
+[![Телеграм](https://img.shields.io/badge/Телеграм-Котамарин-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/kotamarine)
+[![Автор](https://img.shields.io/badge/Автор-AveHarrisan-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/aveharrisan)
+
+### Скачать
+
+[![Android](https://img.shields.io/badge/Скачать_для-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/AveHarrisan/TG-WS-proxy-android/releases/latest/download/TG-WS-Proxy.apk)
+
+[![Версия](https://img.shields.io/github/v/release/AveHarrisan/TG-WS-proxy-android?style=flat-square&label=Версия)](https://github.com/AveHarrisan/TG-WS-proxy-android/releases/latest)
+[![Загрузок](https://img.shields.io/github/downloads/AveHarrisan/TG-WS-proxy-android/total?style=flat-square&label=Загрузок)](https://github.com/AveHarrisan/TG-WS-proxy-android/releases)
+[![Все файлы](https://img.shields.io/badge/Все_файлы-релизы-lightgrey?style=flat-square)](https://github.com/AveHarrisan/TG-WS-proxy-android/releases)
+
+### Поддержать и найти меня
+
+Проект делается в свободное время. Если он вам пригодился:
+
+<table>
+<tr>
+<td align="center" width="120">
+<a href="https://boosty.to/aveharrisan">
+<img src="docs/images/links/boosty.png" width="72" height="72" alt="Boosty"><br>
+<b>Boosty</b>
+</a><br>
+<sub>разово или подпиской</sub>
+</td>
+<td align="center" width="120">
+<a href="https://www.donationalerts.com/r/aveharrisan">
+<img src="https://img.shields.io/badge/DA-%20-F57D07?style=for-the-badge&logo=donationalerts&logoColor=white" height="72" alt="DonationAlerts"><br>
+<b>DonationAlerts</b>
+</a><br>
+<sub>разовый донат<br>без подписки</sub>
+</td>
+<td align="center" width="120">
+<a href="https://lvl.su/">
+<img src="docs/images/links/lvl.png" width="72" height="72" alt="lvl.su"><br>
+<b>lvl.su</b>
+</a><br>
+<sub>гайды и вики</sub>
+</td>
+<td align="center" width="120">
+<a href="https://t.me/kotamarine">
+<img src="docs/images/links/kotamarine.png" width="72" height="72" alt="Котамарин"><br>
+<b>Котамарин</b>
+</a><br>
+<sub>канал про игры<br>и раздачи</sub>
+</td>
+<td align="center" width="120">
+<a href="https://discord.com/invite/XYBvdvfv8t">
+<img src="docs/images/links/discord.png" width="72" height="72" alt="Discord"><br>
+<b>Discord</b>
+</a><br>
+<sub>вопросы и ошибки</sub>
+</td>
+<td align="center" width="120">
+<a href="https://t.me/aveharrisan">
+<img src="docs/images/links/aveharrisan.png" width="72" height="72" alt="AveHarrisan"><br>
+<b>AveHarrisan</b>
+</a><br>
+<sub>телеграм<br>автора</sub>
+</td>
+</tr>
+</table>
+
+</div>
+
+---
 
 Написано целиком на Kotlin, без нативных библиотек.
 
@@ -20,7 +94,7 @@
 
 ## Установка
 
-1. Скачайте APK на странице [Releases](../../releases) и установите его.
+1. Скачайте [APK последней версии](https://github.com/AveHarrisan/TG-WS-proxy-android/releases/latest/download/TG-WS-Proxy.apk) и установите его.
 2. Откройте приложение и нажмите «Запустить прокси».
 3. Нажмите «Подключить в Telegram» и подтвердите добавление прокси в Telegram.
 
@@ -48,16 +122,16 @@
 
 Для подписанной release-сборки положите в `keystore/` файл хранилища и `keystore.properties` с полями `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
 
-## Поддержать и найти меня
+## Другие проекты
 
-- [Boosty](https://boosty.to/aveharrisan) — разово или подпиской
-- [DonationAlerts](https://www.donationalerts.com/r/aveharrisan) — разовый донат без подписки
-- [lvl.su](https://lvl.su/) — сайт: гайды и вики по играм
-- [Котамарин](https://t.me/kotamarine) — телеграм-канал про игры и раздачи
-- [Discord](https://discord.com/invite/XYBvdvfv8t) — вопросы и ошибки
-- [AveHarrisan](https://t.me/aveharrisan) — телеграм автора
+- **[KotaMusic](https://github.com/AveHarrisan/KotaMusic)** — мод Яндекс Музыки для компьютера
+- **[USB-of_on](https://github.com/AveHarrisan/USB-of_on)** — USB-устройства Windows: имена, скрытие, заряд
 
-Другие проекты: [KotaMusic](https://github.com/AveHarrisan/KotaMusic) — мод Яндекс Музыки для компьютера, [USB-of_on](https://github.com/AveHarrisan/USB-of_on) — USB-устройства Windows.
+## Поддержать
+
+Ссылки — [в начале страницы](#поддержать-и-найти-меня): **Boosty** для разовой
+или регулярной поддержки и **DonationAlerts** для разового доната. Кнопка
+«Sponsor» в правой колонке репозитория ведёт туда же.
 
 ## Лицензия
 
