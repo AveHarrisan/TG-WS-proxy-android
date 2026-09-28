@@ -13,6 +13,8 @@ class App : Application() {
         LogFile.init(this)
         Settings.init(this)
         Experimental.init(this)
+        Updater.onAppStart(this)
+        UpdateNotifications.createChannel(this)
         TileAdder.init(this)
         ProxyState.attachLog()
         // На Android системный верификатор имён — полноценный, подключаем его вторым рубежом.
@@ -33,5 +35,8 @@ class App : Application() {
 
     companion object {
         const val CHANNEL_ID = "proxy"
+
+        /** Приложение на экране: окно подтверждения установки можно показать сразу, а не уведомлением. */
+        @Volatile var inForeground = false
     }
 }

@@ -20,6 +20,7 @@ import com.aveharrisan.tgwsproxy.core.Stats
 import com.aveharrisan.tgwsproxy.core.humanBytesRu
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.TimeUnit
 
 /** Служба переднего плана: держит прокси, пока пользователь его не выключит. */
@@ -27,7 +28,9 @@ class ProxyService : Service() {
     private var server: ProxyServer? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
-    private val ticker = Executors.newSingleThreadScheduledExecutor()
+    // Второй поток — для проверки обновлений: сетевой запрос не должен задерживать уведомление.
+    private val ticker = Executors.newScheduledThreadPool(2)
+    private var updateCheck: ScheduledFuture<*>? = null
     private var tick: ScheduledFuture<*>? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -62,6 +65,16 @@ class ProxyService : Service() {
                 ProxyState.startedAt.value = System.currentTimeMillis()
                 ProxyState.status.value = Status.RUNNING
                 tick = ticker.scheduleWithFixedDelay(::updateNotification, 0, 2, TimeUnit.SECONDS)
+                // Как KotaMusic: через минуту после старта и дальше раз в час, пока прокси работает.
+                if (updateCheck == null) updateCheck = ticker.scheduleWithFixedDelay({
+                    runCatching { runBlocking { Updater.backgroundCheck(applicationContext) } }
+                }, 60, Updater.BACKGROUND_CHECK_EVERY_SEC, TimeUnit.SECONDS)
+            } catch (e: java.util.concurrent.RejectedExecutionException) {
+                // Прокси остановили, пока он запускался: службы уже нет — тихо гасим то, что успело подняться.
+                server?.stop()
+                server = null
+                releaseLocks()
+                ProxyState.status.value = Status.STOPPED
             } catch (e: Exception) {
                 val msg = when {
                     e is java.net.BindException -> getString(R.string.err_port_busy, s.port)

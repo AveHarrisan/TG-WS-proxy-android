@@ -3,6 +3,7 @@ package com.aveharrisan.tgwsproxy
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +37,7 @@ import com.aveharrisan.tgwsproxy.ui.LogsScreen
 import com.aveharrisan.tgwsproxy.ui.ProxyScreen
 import com.aveharrisan.tgwsproxy.ui.SettingsScreen
 import com.aveharrisan.tgwsproxy.ui.UpdateBanner
+import com.aveharrisan.tgwsproxy.core.ReleaseNotes
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
         // не нарисованного экрана на части прошивок оставляло серый экран. Спрашиваем при
         // первом «Запустить прокси» и по кнопке «Разрешить» на карточке.
         checkNotif(ask = false)
+        handleUpdateIntent(intent)
         setContent {
             AppTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -84,18 +87,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleUpdateIntent(intent)
+    }
+
+    /** «Обновить» в уведомлении: открываем приложение и сразу обновляемся, как по кнопке на плашке. */
+    private fun handleUpdateIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(UpdateNotifications.EXTRA_UPDATE_NOW, false) != true) return
+        intent.removeExtra(UpdateNotifications.EXTRA_UPDATE_NOW)
+        UpdateNotifications.cancelAvailable(this)
+        val release = Updater.cachedRelease(this)?.takeIf { ReleaseNotes.isNewer(it.version, BuildConfig.VERSION_NAME) } ?: return
+        Updater.dismissed.value = false
+        if (!Updater.canInstall(this)) { Updater.setStatus(UpdateStatus.Available(release)); Updater.openInstallPermission(this); return }
+        lifecycleScope.launch { Updater.update(applicationContext, release) }
+    }
+
     override fun onResume() {
         super.onResume()
+        App.inForeground = true
         checkNotif(ask = false)
-        // Проверка обновлений и при возвращении в приложение, не только при холодном запуске
-        // (не чаще раза в час — это решает сам autoCheck).
+        // Проверка обновлений при каждом открытии и возвращении в приложение (не чаще раза в 5 минут).
         lifecycleScope.launch { Updater.autoCheck(applicationContext) }
         // Вернулись из настроек с разрешением на установку — продолжаем без лишнего нажатия.
-        val s = Updater.status.value
-        if (Updater.installAfterPermission && s is UpdateStatus.Ready && Updater.canInstall(this)) {
+        if (Updater.installAfterPermission && Updater.canInstall(this)) {
             Updater.installAfterPermission = false
-            Updater.install(this, s.file)
+            when (val s = Updater.status.value) {
+                is UpdateStatus.Ready -> Updater.install(this, s.file)
+                is UpdateStatus.Available -> lifecycleScope.launch { Updater.update(applicationContext, s.release) }
+                is UpdateStatus.Failed -> s.release?.let { r -> lifecycleScope.launch { Updater.update(applicationContext, r) } }
+                else -> {}
+            }
         }
+    }
+
+    override fun onPause() {
+        App.inForeground = false
+        super.onPause()
     }
 
     private fun checkNotif(ask: Boolean) {

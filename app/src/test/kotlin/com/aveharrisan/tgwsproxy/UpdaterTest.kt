@@ -140,4 +140,50 @@ class UpdaterTest {
         assertTrue(Updater.takeRestartFlag(ctx))
         assertFalse(Updater.takeRestartFlag(ctx))
     }
+
+    @Test
+    fun oneTapUpdateGoesToPackageInstaller() = runBlocking {
+        val apk = File("build/outputs/apk/release").listFiles { f -> f.name.endsWith(".apk") }!!.first()
+        apkBytes = apk.readBytes()
+        latest = 200 to release("v9.9.9", apkBytes.size.toLong())
+        Updater.check(ctx, manual = true)
+        val r = (Updater.status.value as UpdateStatus.Available).release
+        Updater.update(ctx, r)
+        val s = Updater.status.value
+        assertTrue("$s", s is UpdateStatus.Installing)
+        val sessions = ctx.packageManager.packageInstaller.allSessions
+        assertTrue("сессия установки не создана", sessions.isNotEmpty())
+    }
+
+    @Test
+    fun cancelledInstallKeepsDownloadedFile() {
+        val r = Release("9.9.9", emptyList(), "$base/download/app.apk", 1, "$base/page")
+        val f = File(ctx.cacheDir, "updates").apply { mkdirs() }.let { File(it, "TG-WS-Proxy-9.9.9.apk") }.apply { writeText("x") }
+        Updater.setStatus(UpdateStatus.Installing(r))
+        Updater.onInstallResult(ctx, android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED, null)
+        assertEquals(UpdateStatus.Ready(r, f), Updater.status.value)
+    }
+
+    @Test
+    fun appStartAfterUpdateShowsUpdatedCard() {
+        ctx.getSharedPreferences("updates", Context.MODE_PRIVATE).edit().putString("lastRunVersion", "0.9.0").commit()
+        Updater.justUpdated.value = null
+        Updater.onAppStart(ctx)
+        assertEquals(BuildConfig.VERSION_NAME, Updater.justUpdated.value?.version)
+        Updater.justUpdated.value = null
+        Updater.onAppStart(ctx)
+        assertEquals("второй запуск той же версии — без плашки", null, Updater.justUpdated.value)
+    }
+
+    @Test
+    fun backgroundCheckNotifiesOncePerVersion() = runBlocking {
+        org.robolectric.Shadows.shadowOf(ctx as android.app.Application).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        latest = 200 to release("v9.9.9")
+        val nm = org.robolectric.Shadows.shadowOf(ctx.getSystemService(android.app.NotificationManager::class.java))
+        val before = nm.allNotifications.size
+        Updater.backgroundCheck(ctx)
+        Updater.setStatus(UpdateStatus.Idle)
+        Updater.backgroundCheck(ctx)
+        assertEquals(before + 1, nm.allNotifications.size)
+    }
 }

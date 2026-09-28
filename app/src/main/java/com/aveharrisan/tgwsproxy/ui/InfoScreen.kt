@@ -158,6 +158,7 @@ private fun UpdateCheckCard() {
                     is UpdateStatus.Available -> stringResource(R.string.upd_title, s.release.version)
                     is UpdateStatus.Downloading -> stringResource(R.string.upd_downloading, s.percent)
                     is UpdateStatus.Ready -> stringResource(R.string.upd_ready)
+                    is UpdateStatus.Installing -> stringResource(R.string.upd_installing)
                     is UpdateStatus.Failed -> stringResource(R.string.upd_failed, s.message)
                     UpdateStatus.Idle -> null
                 }

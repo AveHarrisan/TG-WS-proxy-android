@@ -120,7 +120,7 @@
     <string name="upd_checking">Проверяем обновления…</string>
     <string name="upd_latest">Установлена последняя версия</string>
     <string name="upd_perm_title">Разрешите установку</string>
-    <string name="upd_perm_text">Android спросит, можно ли этому приложению устанавливать обновления. Включите «Разрешить из этого источника» и вернитесь назад — установка продолжится сама.</string>
+    <string name="upd_perm_text">Один раз: Android спросит, можно ли этому приложению ставить обновления. Включите «Разрешить из этого источника» и вернитесь назад — обновление продолжится само.</string>
 
     <string name="tile_card">Добавьте кнопку прокси в шторку — включать и выключать одним касанием, не открывая приложение</string>
     <string name="tile_add">Добавить</string>
@@ -175,4 +175,14 @@
     <string name="exp_wifi">Wi-Fi с энергосбережением</string>
     <string name="exp_wifi_hint">Когда включено «Не давать телефону засыпать», Wi-Fi больше не держится в режиме низкой задержки. Применится при следующем запуске прокси.</string>
     <string name="exp_footer">Сильнее всего на заряд влияет «Не давать телефону засыпать» в разделе «Поведение». Выключите его, если прокси и без него работает стабильно.</string>
+
+    <string name="upd_update">Обновить</string>
+    <string name="upd_update_size">Обновить · %1$s</string>
+    <string name="upd_installing">Устанавливается…</string>
+    <string name="upd_installing_hint">Приложение закроется и откроется уже новой версией. Если Android спросит — нажмите «Обновить».</string>
+    <string name="upd_done_title">Обновлено до %1$s</string>
+    <string name="upd_channel">Обновления</string>
+    <string name="upd_channel_desc">Сообщает о новой версии приложения</string>
+    <string name="upd_confirm_title">Обновление скачано</string>
+    <string name="upd_confirm_text">Нажмите, чтобы установить</string>
 </resources>

@@ -2,6 +2,8 @@ package com.aveharrisan.tgwsproxy
 
 import android.content.Context
 import android.content.Intent
+import android.app.PendingIntent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -38,6 +40,8 @@ sealed interface UpdateStatus {
     data class Available(val release: Release) : UpdateStatus
     data class Downloading(val release: Release, val percent: Int) : UpdateStatus
     data class Ready(val release: Release, val file: File) : UpdateStatus
+    /** APK отдан системе: либо ставится молча, либо ждёт подтверждения в системном окне. */
+    data class Installing(val release: Release) : UpdateStatus
     data class Failed(val message: String, val release: Release?) : UpdateStatus
 }
 
@@ -50,7 +54,10 @@ object Updater {
     const val RELEASES_URL = "https://github.com/$REPO/releases"
     /** Меняется только в тестах — там вместо GitHub свой сервер. */
     internal var api = "https://api.github.com/repos/$REPO/releases/latest"
-    private const val AUTO_CHECK_EVERY_MS = 60 * 60 * 1000L
+    private const val AUTO_CHECK_EVERY_MS = 5 * 60 * 1000L
+    /** Пока работает прокси, проверяем в фоне раз в час — как KotaMusic, пока открыт клиент. */
+    const val BACKGROUND_CHECK_EVERY_SEC = 60 * 60L
+    const val ACTION_INSTALL_RESULT = "com.aveharrisan.tgwsproxy.INSTALL_RESULT"
 
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
     val status: StateFlow<UpdateStatus> = _status
@@ -71,10 +78,45 @@ object Updater {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("updates", Context.MODE_PRIVATE)
 
-    /** Проверка при открытии приложения — не чаще раза в несколько часов. */
+    /** Только что обновились: версия, до которой обновились, — для плашки «Обновлено до …». */
+    val justUpdated = MutableStateFlow<Release?>(null)
+
+    /**
+     * При каждом запуске процесса: если версия сменилась с прошлого раза — значит, обновились.
+     * Заодно убираем скачанный APK: он больше не нужен.
+     */
+    fun onAppStart(ctx: Context) {
+        val p = prefs(ctx)
+        val last = p.getString("lastRunVersion", null)
+        if (last != null && last != BuildConfig.VERSION_NAME) {
+            val cached = cachedRelease(ctx)?.takeIf { it.version == BuildConfig.VERSION_NAME }
+            justUpdated.value = cached ?: Release(BuildConfig.VERSION_NAME, emptyList(), "", 0, RELEASES_URL)
+            File(ctx.cacheDir, "updates").listFiles()?.forEach { it.delete() }
+            Log.i("Обновлено: $last → ${BuildConfig.VERSION_NAME}")
+        }
+        if (last != BuildConfig.VERSION_NAME) p.edit().putString("lastRunVersion", BuildConfig.VERSION_NAME).apply()
+    }
+
+    fun cachedRelease(ctx: Context): Release? =
+        prefs(ctx).getString("lastRelease", null)?.let { runCatching { parse(JSONObject(it)) }.getOrNull() }
+
+    /**
+     * Фоновая проверка из службы прокси. Нашлась новая версия — уведомление с кнопкой «Обновить»,
+     * по одному разу на версию, чтобы не надоедать.
+     */
+    suspend fun backgroundCheck(ctx: Context) {
+        check(ctx, manual = false)
+        val s = _status.value as? UpdateStatus.Available ?: return
+        val p = prefs(ctx)
+        if (p.getString("notifiedVersion", null) == s.release.version) return
+        UpdateNotifications.showAvailable(ctx, s.release)
+        p.edit().putString("notifiedVersion", s.release.version).apply()
+    }
+
+    /** Проверка при открытии приложения — не чаще раза в несколько минут (лимит GitHub — 60 запросов в час). */
     suspend fun autoCheck(ctx: Context) {
         val last = prefs(ctx).getLong("lastCheck", 0)
-        val cached = prefs(ctx).getString("lastRelease", null)?.let { runCatching { parse(JSONObject(it)) }.getOrNull() }
+        val cached = cachedRelease(ctx)
         if (System.currentTimeMillis() - last < AUTO_CHECK_EVERY_MS) {
             if (cached != null && isNewer(cached.version, BuildConfig.VERSION_NAME) && _status.value == UpdateStatus.Idle)
                 _status.value = UpdateStatus.Available(cached)
@@ -85,7 +127,7 @@ object Updater {
 
     suspend fun check(ctx: Context, manual: Boolean) {
         val s = _status.value
-        if (s is UpdateStatus.Checking || s is UpdateStatus.Downloading) return
+        if (s is UpdateStatus.Checking || s is UpdateStatus.Downloading || s is UpdateStatus.Installing || s is UpdateStatus.Ready) return
         if (manual) dismissed.value = false
         _status.value = UpdateStatus.Checking
         _status.value = try {
@@ -110,6 +152,15 @@ object Updater {
             Log.w("Скачивание обновления: ${e.message ?: e.javaClass.simpleName}")
             UpdateStatus.Failed(explain(e), release)
         }
+    }
+
+    /** «Обновить» — как в KotaMusic: скачать и сразу поставить, без второго нажатия. */
+    suspend fun update(ctx: Context, release: Release) {
+        val s = _status.value
+        if (s is UpdateStatus.Downloading || s is UpdateStatus.Installing) return
+        if (s is UpdateStatus.Ready && s.release == release && s.file.exists()) { install(ctx, s.file); return }
+        download(ctx, release)
+        (_status.value as? UpdateStatus.Ready)?.let { install(ctx, it.file) }
     }
 
     /** Может ли приложение ставить APK. Если нет — сначала ведём в настройки за разрешением. */
@@ -138,12 +189,69 @@ object Updater {
         // Установка поверх останавливает приложение, а с ним и прокси. Запоминаем, что он работал,
         // и после обновления поднимаем его снова (BootReceiver).
         prefs(ctx).edit().putBoolean("restartProxy", ProxyService.isActive).commit()
-        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
-        ctx.startActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+        val release = (s as? UpdateStatus.Ready)?.release
+        try {
+            installWithSession(ctx, file)
+            if (release != null) _status.value = UpdateStatus.Installing(release)
+        } catch (e: Exception) {
+            // Установщик пакетов недоступен (редкие прошивки) — старый путь через системный экран установки.
+            Log.w("Установка через PackageInstaller не вышла (${e.message}), открываю системный установщик")
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+            ctx.startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
+    /**
+     * Первое обновление Android всегда подтверждает сам. Дальше, на Android 12+, приложение —
+     * «установщик» самого себя и может обновляться без вопросов (USER_ACTION_NOT_REQUIRED).
+     */
+    private fun installWithSession(ctx: Context, file: File) {
+        val installer = ctx.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(ctx.packageName)
+            setSize(file.length())
+            if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            session.openWrite("update.apk", 0, file.length()).use { out ->
+                file.inputStream().use { it.copyTo(out) }
+                session.fsync(out)
+            }
+            val result = Intent(ctx, InstallResultReceiver::class.java).setAction(ACTION_INSTALL_RESULT)
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+            session.commit(PendingIntent.getBroadcast(ctx, id, result, flags).intentSender)
+        }
+        Log.i("Обновление передано системе на установку")
+    }
+
+    /** Итог установки от системы (InstallResultReceiver). */
+    internal fun onInstallResult(ctx: Context, status: Int, message: String?) {
+        val s = _status.value
+        val release = (s as? UpdateStatus.Installing)?.release ?: (s as? UpdateStatus.Ready)?.release
+        when (status) {
+            PackageInstaller.STATUS_SUCCESS -> Log.i("Обновление установлено")
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                // Отменили в системном окне — оставляем «Установить», файл уже скачан.
+                Log.i("Установку обновления отменили")
+                val file = File(ctx.cacheDir, "updates").listFiles()?.firstOrNull { it.name.endsWith(".apk") }
+                if (release != null && file != null) _status.value = UpdateStatus.Ready(release, file)
+            }
+            else -> {
+                Log.w("Установка обновления не удалась: $status $message")
+                val text = when (status) {
+                    PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
+                        "эта версия подписана другим ключом и не встанет поверх. Удалите приложение и поставьте новую версию со страницы выпуска"
+                    PackageInstaller.STATUS_FAILURE_STORAGE -> "не хватает места на телефоне"
+                    else -> "система не установила обновление" + (message?.let { " ($it)" } ?: "")
+                }
+                _status.value = UpdateStatus.Failed(text, release)
+            }
+        }
     }
 
     private fun open(url: String): HttpURLConnection =

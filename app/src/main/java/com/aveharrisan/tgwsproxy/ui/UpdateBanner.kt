@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
@@ -59,11 +60,41 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
         is UpdateStatus.Available -> s.release
         is UpdateStatus.Downloading -> s.release
         is UpdateStatus.Ready -> s.release
+        is UpdateStatus.Installing -> s.release
         is UpdateStatus.Failed -> s.release
         else -> null
     }
-    AnimatedVisibility(release != null && !dismissed, modifier, enter = expandVertically(), exit = shrinkVertically()) {
-        if (release != null) UpdateCard(status, release)
+    val updated by Updater.justUpdated.collectAsState()
+    Column(modifier) {
+        // Только что обновились — коротко, как KotaMusic после перезапуска.
+        AnimatedVisibility(updated != null, enter = expandVertically(), exit = shrinkVertically()) {
+            updated?.let { UpdatedCard(it) }
+        }
+        AnimatedVisibility(release != null && !dismissed, enter = expandVertically(), exit = shrinkVertically()) {
+            if (release != null) UpdateCard(status, release)
+        }
+    }
+}
+
+@Composable
+private fun UpdatedCard(release: Release) {
+    Card(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.CheckCircle, null, Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(stringResource(R.string.upd_done_title, release.version), Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = { Updater.justUpdated.value = null }) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) }
+            }
+            Column(Modifier.padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                release.notes.take(5).forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+            }
+        }
     }
 }
 
@@ -77,6 +108,11 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
 
     fun installOrAsk(s: UpdateStatus.Ready) {
         if (Updater.canInstall(ctx)) Updater.install(ctx, s.file) else needPermission = true
+    }
+
+    // Одна кнопка, как в KotaMusic: скачать и сразу поставить.
+    fun updateOrAsk() {
+        if (Updater.canInstall(ctx)) scope.launch { Updater.update(ctx.applicationContext, release) } else needPermission = true
     }
 
     Card(
@@ -111,6 +147,7 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
                         LinearProgressIndicator(progress = { status.percent / 100f }, Modifier.fillMaxWidth().padding(top = 6.dp))
                         Text(stringResource(R.string.upd_downloading, status.percent), style = MaterialTheme.typography.bodySmall)
                     }
+                    is UpdateStatus.Installing -> Text(stringResource(R.string.upd_installing_hint), style = MaterialTheme.typography.bodySmall)
                     is UpdateStatus.Failed -> Text(stringResource(R.string.upd_failed, status.message),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     else -> {}
@@ -120,10 +157,11 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
                     when (status) {
                         is UpdateStatus.Ready -> Button(onClick = { installOrAsk(status) }) { Text(stringResource(R.string.upd_install)) }
                         is UpdateStatus.Downloading -> Button(onClick = {}, enabled = false) { Text(stringResource(R.string.upd_wait)) }
-                        else -> Button(onClick = { scope.launch { Updater.download(ctx, release) } }) {
+                        is UpdateStatus.Installing -> Button(onClick = {}, enabled = false) { Text(stringResource(R.string.upd_installing)) }
+                        else -> Button(onClick = { updateOrAsk() }) {
                             Text(if (status is UpdateStatus.Failed) stringResource(R.string.upd_retry)
-                            else if (release.apkSize > 0) stringResource(R.string.upd_download_size, humanBytesRu(release.apkSize))
-                            else stringResource(R.string.upd_download))
+                            else if (release.apkSize > 0) stringResource(R.string.upd_update_size, humanBytesRu(release.apkSize))
+                            else stringResource(R.string.upd_update))
                         }
                     }
                     // Сорвалось — сразу даём собрать логи: по одной строке ошибки причину не найти.
