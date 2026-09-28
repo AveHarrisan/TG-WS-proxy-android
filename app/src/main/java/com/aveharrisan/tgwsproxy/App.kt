@@ -10,7 +10,9 @@ import javax.net.ssl.HttpsURLConnection
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        LogFile.init(this)
         Settings.init(this)
+        TileAdder.init(this)
         ProxyState.attachLog()
         // На Android системный верификатор имён — полноценный, подключаем его вторым рубежом.
         com.aveharrisan.tgwsproxy.core.Net.hostnameVerifier = { host, session ->

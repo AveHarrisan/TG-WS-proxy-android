@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,6 +43,7 @@ import com.aveharrisan.tgwsproxy.AppSettings
 import com.aveharrisan.tgwsproxy.ProxyService
 import com.aveharrisan.tgwsproxy.R
 import com.aveharrisan.tgwsproxy.Settings
+import com.aveharrisan.tgwsproxy.TileAdder
 import com.aveharrisan.tgwsproxy.core.DcIpParser
 import com.aveharrisan.tgwsproxy.core.Domains
 import com.aveharrisan.tgwsproxy.core.Level
@@ -115,6 +117,7 @@ fun SettingsScreen(modifier: Modifier) {
         SwitchRow(stringResource(R.string.label_autostart), stringResource(R.string.hint_autostart), s.autostart) { s = s.copy(autostart = it) }
         SwitchRow(stringResource(R.string.label_wakelock), stringResource(R.string.hint_wakelock), s.wakeLock) { s = s.copy(wakeLock = it) }
         SwitchRow(stringResource(R.string.label_verbose), stringResource(R.string.hint_verbose), s.verbose) { s = s.copy(verbose = it) }
+        TileRow()
 
         HorizontalDivider()
         // Сводка ошибок — прямо у кнопки, чтобы не искать, что не так.
@@ -157,6 +160,23 @@ fun SettingsScreen(modifier: Modifier) {
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun TileRow() {
+    val ctx = LocalContext.current
+    val added by TileAdder.added.collectAsState()
+    var manual by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.label_tile), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(if (added) R.string.hint_tile_added else R.string.hint_tile_add), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        TextButton(onClick = { addTile(ctx) { manual = true } }) { Text(stringResource(R.string.tile_add)) }
+    }
+    if (manual) TileManualDialog { manual = false }
 }
 
 @Composable

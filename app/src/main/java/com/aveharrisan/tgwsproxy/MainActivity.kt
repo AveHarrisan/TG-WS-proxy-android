@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
@@ -27,11 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.aveharrisan.tgwsproxy.ui.AppTheme
 import com.aveharrisan.tgwsproxy.ui.InfoScreen
 import com.aveharrisan.tgwsproxy.ui.LogsScreen
 import com.aveharrisan.tgwsproxy.ui.ProxyScreen
 import com.aveharrisan.tgwsproxy.ui.SettingsScreen
+import com.aveharrisan.tgwsproxy.ui.UpdateBanner
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     val notifGranted = mutableStateOf(true)
@@ -42,6 +47,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         checkNotif(ask = true)
+        lifecycleScope.launch { Updater.autoCheck(applicationContext) }
         setContent {
             AppTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -59,12 +65,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }) { pad ->
-                    val m = Modifier.padding(pad)
-                    when (tab) {
-                        0 -> ProxyScreen(m, notifGranted.value, onAskNotif = { checkNotif(ask = true) }, onOpenSettings = { tab = 1 })
-                        1 -> SettingsScreen(m)
-                        2 -> LogsScreen(m)
-                        else -> InfoScreen(m)
+                    // Плашка обновления — над любой вкладкой, как сообщение в KotaMusic.
+                    Column(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding(), bottom = pad.calculateBottomPadding())) {
+                        UpdateBanner()
+                        val m = Modifier.weight(1f)
+                        when (tab) {
+                            0 -> ProxyScreen(m, notifGranted.value, onAskNotif = { checkNotif(ask = true) }, onOpenSettings = { tab = 1 })
+                            1 -> SettingsScreen(m)
+                            2 -> LogsScreen(m)
+                            else -> InfoScreen(m)
+                        }
                     }
                 }
             }
@@ -74,6 +84,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkNotif(ask = false)
+        // Вернулись из настроек с разрешением на установку — продолжаем без лишнего нажатия.
+        val s = Updater.status.value
+        if (Updater.installAfterPermission && s is UpdateStatus.Ready && Updater.canInstall(this)) {
+            Updater.installAfterPermission = false
+            Updater.install(this, s.file)
+        }
     }
 
     private fun checkNotif(ask: Boolean) {

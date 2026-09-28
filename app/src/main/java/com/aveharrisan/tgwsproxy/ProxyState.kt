@@ -31,6 +31,7 @@ object ProxyState {
                     Level.WARN -> android.util.Log.WARN; Level.ERROR -> android.util.Log.ERROR },
                 "TgWsProxy", line,
             )
+            LogFile.append(line)
             synchronized(this) {
                 val cur = _logs.value
                 val next = if (cur.size >= MAX_LINES) cur.subList(cur.size - MAX_LINES + 200, cur.size) else cur

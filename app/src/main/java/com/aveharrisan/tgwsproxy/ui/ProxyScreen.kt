@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PowerSettingsNew
+import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -69,6 +70,7 @@ import com.aveharrisan.tgwsproxy.ProxyState
 import com.aveharrisan.tgwsproxy.R
 import com.aveharrisan.tgwsproxy.Settings
 import com.aveharrisan.tgwsproxy.Status
+import com.aveharrisan.tgwsproxy.TileAdder
 import com.aveharrisan.tgwsproxy.core.Diagnostics
 import com.aveharrisan.tgwsproxy.core.Stats
 import com.aveharrisan.tgwsproxy.core.humanBytes
@@ -122,6 +124,7 @@ fun ProxyScreen(modifier: Modifier, notifGranted: Boolean, onAskNotif: () -> Uni
         if (!batteryOk) WarnCard(Icons.Outlined.BatteryAlert, stringResource(R.string.warn_battery), stringResource(R.string.btn_allow)) {
             requestIgnoreBattery(ctx)
         }
+        TileCard()
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -216,6 +219,51 @@ private fun WarnCard(icon: androidx.compose.ui.graphics.vector.ImageVector, text
             TextButton(onClick = onClick) { Text(action) }
         }
     }
+}
+
+/** Предложение вынести кнопку прокси в шторку. Пропадает, когда плитка добавлена или карточку скрыли. */
+@Composable
+private fun TileCard() {
+    val ctx = LocalContext.current
+    val added by TileAdder.added.collectAsState()
+    val prefs = remember { ctx.getSharedPreferences("tile", Context.MODE_PRIVATE) }
+    var hidden by remember { mutableStateOf(prefs.getBoolean("cardHidden", false)) }
+    var manual by remember { mutableStateOf(false) }
+    if (added || hidden) return
+
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.ToggleOn, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.tile_card), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            Row(Modifier.align(Alignment.End)) {
+                TextButton(onClick = { hidden = true; prefs.edit().putBoolean("cardHidden", true).apply() }) {
+                    Text(stringResource(R.string.tile_hide))
+                }
+                TextButton(onClick = { addTile(ctx) { manual = true } }) { Text(stringResource(R.string.tile_add)) }
+            }
+        }
+    }
+    if (manual) TileManualDialog { manual = false }
+}
+
+/** Системное окно «Добавить плитку» (Android 13+), а на старых — подсказка, как добавить руками. */
+fun addTile(ctx: Context, onManual: () -> Unit) {
+    if (!TileAdder.canRequest) { onManual(); return }
+    TileAdder.request(ctx) { ok -> if (ok) Toast.makeText(ctx, R.string.tile_added, Toast.LENGTH_SHORT).show() }
+}
+
+@Composable
+fun TileManualDialog(onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.tile_manual_title)) },
+        text = { Text(stringResource(R.string.tile_manual_text)) },
+        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
+    )
 }
 
 @Composable

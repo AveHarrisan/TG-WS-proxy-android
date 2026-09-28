@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     kotlin("android")
     kotlin("plugin.compose")
+    id("io.github.takahirom.roborazzi")
 }
 
 val signing = Properties().apply {
@@ -19,8 +20,8 @@ android {
         applicationId = "com.aveharrisan.tgwsproxy"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -48,6 +49,14 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    // Тесты приложения на компьютере: Robolectric вместо телефона, Roborazzi снимает экраны.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            // Проверка подписи APK внутри Robolectric читает файл через DirectByteBuffer.
+            all { it.jvmArgs("--add-opens=java.base/java.nio=ALL-UNNAMED") }
+        }
+    }
 }
 
 base.archivesName.set("TG-WS-Proxy-${android.defaultConfig.versionName}")
@@ -61,4 +70,14 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.32.2")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.32.2")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.32.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

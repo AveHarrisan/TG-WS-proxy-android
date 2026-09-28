@@ -8,7 +8,14 @@ import android.service.quicksettings.TileService
 
 /** Плитка в шторке: включить или выключить прокси одним касанием. */
 class ProxyTileService : TileService() {
-    override fun onStartListening() = update()
+    override fun onStartListening() {
+        if (!TileAdder.added.value) TileAdder.markAdded(this, true)
+        update()
+    }
+
+    override fun onTileAdded() = TileAdder.markAdded(this, true)
+
+    override fun onTileRemoved() = TileAdder.markAdded(this, false)
 
     override fun onClick() {
         if (ProxyService.isActive) ProxyService.stop(this) else ProxyService.start(this)

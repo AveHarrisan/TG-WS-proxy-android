@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Share
@@ -25,6 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,6 +48,7 @@ fun LogsScreen(modifier: Modifier) {
     val ctx = LocalContext.current
     val logs by ProxyState.logs.collectAsState()
     val state = rememberLazyListState()
+    var reportOpen by remember { mutableStateOf(false) }
     LaunchedEffect(logs.size) { if (logs.isNotEmpty()) state.scrollToItem(logs.lastIndex) }
 
     fun report(): String = buildString {
@@ -56,6 +61,7 @@ fun LogsScreen(modifier: Modifier) {
     Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.tab_logs), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            IconButton(onClick = { reportOpen = true }) { Icon(Icons.Outlined.BugReport, stringResource(R.string.rep_btn)) }
             IconButton(onClick = { copy(ctx, report()) }) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.copy)) }
             IconButton(onClick = {
                 val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report())
@@ -83,4 +89,5 @@ fun LogsScreen(modifier: Modifier) {
             }
         }
     }
+    if (reportOpen) ReportDialog { reportOpen = false }
 }
