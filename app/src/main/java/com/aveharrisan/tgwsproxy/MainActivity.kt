@@ -46,7 +46,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        checkNotif(ask = true)
+        // Разрешение на уведомления не спрашиваем при запуске: системное окно поверх ещё
+        // не нарисованного экрана на части прошивок оставляло серый экран. Спрашиваем при
+        // первом «Запустить прокси» и по кнопке «Разрешить» на карточке.
+        checkNotif(ask = false)
         lifecycleScope.launch { Updater.autoCheck(applicationContext) }
         setContent {
             AppTheme {
@@ -70,7 +73,8 @@ class MainActivity : ComponentActivity() {
                         UpdateBanner()
                         val m = Modifier.weight(1f)
                         when (tab) {
-                            0 -> ProxyScreen(m, notifGranted.value, onAskNotif = { checkNotif(ask = true) }, onOpenSettings = { tab = 1 })
+                            0 -> ProxyScreen(m, notifGranted.value, onAskNotif = { checkNotif(ask = true) }, onOpenSettings = { tab = 1 },
+                                onBeforeStart = { checkNotif(ask = true) })
                             1 -> SettingsScreen(m)
                             2 -> LogsScreen(m)
                             else -> InfoScreen(m)

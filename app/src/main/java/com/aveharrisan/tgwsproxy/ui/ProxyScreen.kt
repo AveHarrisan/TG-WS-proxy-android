@@ -73,14 +73,20 @@ import com.aveharrisan.tgwsproxy.Status
 import com.aveharrisan.tgwsproxy.TileAdder
 import com.aveharrisan.tgwsproxy.core.Diagnostics
 import com.aveharrisan.tgwsproxy.core.Stats
-import com.aveharrisan.tgwsproxy.core.humanBytes
+import com.aveharrisan.tgwsproxy.core.humanBytesRu
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ProxyScreen(modifier: Modifier, notifGranted: Boolean, onAskNotif: () -> Unit, onOpenSettings: () -> Unit) {
+fun ProxyScreen(
+    modifier: Modifier,
+    notifGranted: Boolean,
+    onAskNotif: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onBeforeStart: () -> Unit = {},
+) {
     val ctx = LocalContext.current
     val status by ProxyState.status.collectAsState()
     val error by ProxyState.error.collectAsState()
@@ -103,7 +109,14 @@ fun ProxyScreen(modifier: Modifier, notifGranted: Boolean, onAskNotif: () -> Uni
 
         val running = status == Status.RUNNING || status == Status.STARTING
         Button(
-            onClick = { if (running) ProxyService.stop(ctx) else ProxyService.start(ctx) },
+            onClick = {
+                if (running) ProxyService.stop(ctx)
+                else {
+                    // Прокси работает и без разрешения, просто Android может выгрузить его из памяти.
+                    if (!notifGranted) onBeforeStart()
+                    ProxyService.start(ctx)
+                }
+            },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = if (running) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer) else ButtonDefaults.buttonColors(),
@@ -198,7 +211,7 @@ private fun StatsCard() {
             KeyValue(stringResource(R.string.stat_active), "${Stats.connectionsActive.get()} / ${Stats.connectionsTotal.get()}")
             KeyValue(stringResource(R.string.stat_routes),
                 "WS ${Stats.connectionsWs.get()} · CF ${Stats.connectionsCfProxy.get()} · TCP ${Stats.connectionsTcpFallback.get()}")
-            KeyValue(stringResource(R.string.stat_traffic), "↑ ${humanBytes(Stats.bytesUp.get())}   ↓ ${humanBytes(Stats.bytesDown.get())}")
+            KeyValue(stringResource(R.string.stat_traffic), "↑ ${humanBytesRu(Stats.bytesUp.get())}   ↓ ${humanBytesRu(Stats.bytesDown.get())}")
             if (Stats.connectionsBad.get() > 0) KeyValue(stringResource(R.string.stat_bad), Stats.connectionsBad.get().toString())
         }
     }

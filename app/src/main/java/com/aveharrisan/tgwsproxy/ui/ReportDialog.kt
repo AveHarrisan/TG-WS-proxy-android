@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.aveharrisan.tgwsproxy.BugReport
 import com.aveharrisan.tgwsproxy.R
-import com.aveharrisan.tgwsproxy.core.humanBytes
+import com.aveharrisan.tgwsproxy.core.humanBytesRu
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,7 +94,7 @@ fun ReportDialog(onClose: () -> Unit) {
                         }
                     }
                     else -> {
-                        Text(stringResource(R.string.rep_ready, humanBytes(r.file.length())), style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.rep_ready, humanBytesRu(r.file.length())), style = MaterialTheme.typography.bodyMedium)
                         Choice(Icons.Outlined.BugReport, R.string.rep_github, R.string.rep_github_sub) {
                             val link = r.issueLink()
                             if (link.trimmed) Toast.makeText(ctx, R.string.rep_trimmed, Toast.LENGTH_LONG).show()

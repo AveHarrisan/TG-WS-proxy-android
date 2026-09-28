@@ -17,7 +17,7 @@ import com.aveharrisan.tgwsproxy.core.Level
 import com.aveharrisan.tgwsproxy.core.Log
 import com.aveharrisan.tgwsproxy.core.ProxyServer
 import com.aveharrisan.tgwsproxy.core.Stats
-import com.aveharrisan.tgwsproxy.core.humanBytes
+import com.aveharrisan.tgwsproxy.core.humanBytesRu
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -120,7 +120,7 @@ class ProxyService : Service() {
 
     private fun updateNotification() {
         val text = getString(R.string.notif_stats, Stats.connectionsActive.get(),
-            humanBytes(Stats.bytesUp.get()), humanBytes(Stats.bytesDown.get()))
+            humanBytesRu(Stats.bytesUp.get()), humanBytesRu(Stats.bytesDown.get()))
         if (Experimental.current.quietNotification) {
             // Экран выключен — уведомление никто не видит; цифры те же — перерисовывать нечего.
             val screenOn = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive

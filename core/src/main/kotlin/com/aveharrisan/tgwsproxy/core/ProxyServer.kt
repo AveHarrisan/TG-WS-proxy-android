@@ -64,7 +64,7 @@ class ProxyServer(config: ProxyConfig) {
         logBanner()
         sched.scheduleWithFixedDelay({
             val bl = wsBlacklist.sorted().joinToString(", ") { "DC$it" }.ifEmpty { "none" }
-            Log.i("stats: ${Stats.summary()} | ws_bl: $bl")
+            Log.d("stats: ${Stats.summary()} | ws_bl: $bl")
         }, 60, 60, TimeUnit.SECONDS)
         wsPool.warmup()
         cfWorkerPool.warmup()
@@ -224,11 +224,11 @@ class ProxyServer(config: ProxyConfig) {
 
             if (target == null || dcKey in wsBlacklist || (t < (ipFailUntil[target] ?: 0.0) && anyCf)) {
                 when {
-                    target == null -> Log.i("[$label] DC$dc нет в настройках -> fallback")
-                    dcKey in wsBlacklist -> Log.i("[$label] DC$dc$mediaTag WS в чёрном списке -> fallback")
+                    target == null -> Log.d("[$label] DC$dc нет в настройках -> fallback")
+                    dcKey in wsBlacklist -> Log.d("[$label] DC$dc$mediaTag WS в чёрном списке -> fallback")
                     else -> {
                         ws = if (!isTestDc) wsPool.get(dc, isMedia, target, domains) else null
-                        Log.i("[$label] DC$dc$mediaTag WS до $target недавно не отвечал" +
+                        Log.d("[$label] DC$dc$mediaTag WS до $target недавно не отвечал" +
                             if (ws == null) " -> fallback" else ", но есть готовое соединение в пуле")
                     }
                 }
@@ -246,9 +246,9 @@ class ProxyServer(config: ProxyConfig) {
             var allRedirects = true
 
             if (ws == null && !isTestDc) ws = wsPool.get(dc, isMedia, target, domains)
-            if (ws != null) Log.i("[$label] DC$dc$mediaTag -> pool hit via $target")
+            if (ws != null) Log.d("[$label] DC$dc$mediaTag -> pool hit via $target")
             else for (domain in domains) {
-                Log.i("[$label] DC$dc$mediaTag -> wss://$domain$wsPath via $target")
+                Log.d("[$label] DC$dc$mediaTag -> wss://$domain$wsPath via $target")
                 try {
                     ws = RawWebSocket.connect(target, domain, wsTimeout, wsPath)
                     allRedirects = false

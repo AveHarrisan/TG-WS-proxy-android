@@ -20,8 +20,8 @@ android {
         applicationId = "com.aveharrisan.tgwsproxy"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
     }
 
     signingConfigs {
@@ -68,6 +68,8 @@ val copyLicense = tasks.register<Copy>("copyLicense") {
 }
 android.sourceSets["main"].assets.srcDir(licenseAssets)
 tasks.named("preBuild") { dependsOn(copyLicense) }
+// UpdaterTest качает настоящий подписанный APK — собираем его до тестов, в том числе после clean.
+tasks.withType<Test>().configureEach { dependsOn("assembleRelease") }
 
 base.archivesName.set("TG-WS-Proxy-${android.defaultConfig.versionName}")
 

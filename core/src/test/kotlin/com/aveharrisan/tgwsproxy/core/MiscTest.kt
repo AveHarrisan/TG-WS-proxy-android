@@ -100,4 +100,11 @@ class Base64Test {
             assertEquals(java.util.Base64.getEncoder().encodeToString(b), RawWebSocket.base64(b))
         }
     }
+
+    @Test
+    fun humanBytesRu() {
+        assertEquals("512 Б", humanBytesRu(512))
+        assertEquals("1,4 МБ", humanBytesRu(1_500_000))
+        assertEquals("2,0 КБ", humanBytesRu(2048))
+    }
 }

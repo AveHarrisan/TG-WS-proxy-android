@@ -95,7 +95,7 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
                 "cf_worker" -> cfWorkerFallback(clt, relayInit, label, ctx, dc, isTestDc, isMedia, dst!!)
                 "cf" -> cfProxyFallback(clt, relayInit, label, ctx, dc, isMedia, splitter)
                 else -> {
-                    Log.i("[$label] DC$dc$mediaTag -> TCP fallback to $dst:443")
+                    Log.d("[$label] DC$dc$mediaTag -> TCP fallback to $dst:443")
                     tcpFallback(clt, dst!!, 443, relayInit, label, ctx)
                 }
             }
@@ -110,10 +110,10 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
         val domains = cfg().cfProxyWorkerDomains
         val pooled = if (isTestDc) null else cfWorkerPool.get(dc, dst, domains)
         val ws = if (pooled != null) {
-            Log.i("[$label] DC$dc$mediaTag -> CF worker pool hit via ${pooled.second} for $dst")
+            Log.d("[$label] DC$dc$mediaTag -> CF worker pool hit via ${pooled.second} for $dst")
             pooled.first
         } else {
-            Log.i("[$label] DC$dc$mediaTag -> trying CF worker for $dst")
+            Log.d("[$label] DC$dc$mediaTag -> trying CF worker for $dst")
             cfWorkerPool.connectOne(domains, dst, dc, timeoutMs = 10_000)?.first ?: return false
         }
         Stats.connectionsCfProxy.incrementAndGet()
@@ -125,7 +125,7 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
     private fun cfProxyFallback(clt: ClientConn, relayInit: ByteArray, label: String, ctx: CryptoCtx,
                                 dc: Int, isMedia: Boolean, splitter: MsgSplitter?): Boolean {
         val mediaTag = if (isMedia) " media" else ""
-        Log.i("[$label] DC$dc$mediaTag -> trying CF proxy")
+        Log.d("[$label] DC$dc$mediaTag -> trying CF proxy")
         var ws: RawWebSocket? = null
         var chosen: String? = null
         for (base in Balancer.domainsForDc(dc)) {
@@ -248,7 +248,7 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
             clt.close()
             up.join(1000)
             val elapsed = (System.nanoTime() - start) / 1e9
-            Log.i("[$label] $dcTag WS session closed (${reason.get()}): ^${humanBytes(upBytes)} ($upPk pkts) " +
+            Log.d("[$label] $dcTag WS session closed (${reason.get()}): ^${humanBytes(upBytes)} ($upPk pkts) " +
                 "v${humanBytes(downBytes)} ($downPk pkts) in ${"%.1f".format(elapsed)}s")
         }
     }

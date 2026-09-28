@@ -40,6 +40,17 @@ object Proto {
     }
 }
 
+/** Размер для интерфейса: «1,4 МБ». В журнале остаётся humanBytes — латиницей. */
+fun humanBytesRu(n: Long): String {
+    if (n < 1024) return "$n Б"
+    var v = n.toDouble()
+    for (unit in arrayOf("КБ", "МБ", "ГБ", "ТБ")) {
+        v /= 1024
+        if (kotlin.math.abs(v) < 1024 || unit == "ТБ") return String.format(java.util.Locale.forLanguageTag("ru"), "%.1f %s", v, unit)
+    }
+    return "$n Б"
+}
+
 fun humanBytes(n: Long): String {
     var v = n.toDouble()
     for (unit in arrayOf("B", "KB", "MB", "GB")) {

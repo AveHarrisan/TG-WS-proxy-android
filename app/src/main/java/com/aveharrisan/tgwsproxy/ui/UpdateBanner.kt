@@ -47,7 +47,7 @@ import com.aveharrisan.tgwsproxy.R
 import com.aveharrisan.tgwsproxy.Release
 import com.aveharrisan.tgwsproxy.UpdateStatus
 import com.aveharrisan.tgwsproxy.Updater
-import com.aveharrisan.tgwsproxy.core.humanBytes
+import com.aveharrisan.tgwsproxy.core.humanBytesRu
 import kotlinx.coroutines.launch
 
 /** Плашка «Вышла новая версия» над любой вкладкой: что изменилось, скачать и установить. */
@@ -122,7 +122,7 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
                         is UpdateStatus.Downloading -> Button(onClick = {}, enabled = false) { Text(stringResource(R.string.upd_wait)) }
                         else -> Button(onClick = { scope.launch { Updater.download(ctx, release) } }) {
                             Text(if (status is UpdateStatus.Failed) stringResource(R.string.upd_retry)
-                            else if (release.apkSize > 0) stringResource(R.string.upd_download_size, humanBytes(release.apkSize))
+                            else if (release.apkSize > 0) stringResource(R.string.upd_download_size, humanBytesRu(release.apkSize))
                             else stringResource(R.string.upd_download))
                         }
                     }
