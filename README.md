@@ -99,6 +99,53 @@ WebSocket поверх TLS. Помогает там, где прямое под�
 
 Требуется Android 7.0 или новее.
 
+## Скриншоты
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/01-update-available.jpg" width="250" alt="Новая версия — прямо в приложении"><br>
+<sub>Новая версия — прямо в приложении</sub>
+</td>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/02-updated-main.jpg" width="250" alt="Обновлено, прокси работает"><br>
+<sub>Обновлено, прокси работает</sub>
+</td>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/09-log.jpg" width="250" alt="Журнал"><br>
+<sub>Журнал</sub>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/03-settings.jpg" width="250" alt="Настройки"><br>
+<sub>Настройки</sub>
+</td>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/04-settings-cloudflare.jpg" width="250" alt="Cloudflare и дополнительно"><br>
+<sub>Cloudflare и дополнительно</sub>
+</td>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/05-settings-behavior.jpg" width="250" alt="Поведение"><br>
+<sub>Поведение</sub>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/06-about.jpg" width="250" alt="О программе"><br>
+<sub>О программе</sub>
+</td>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/07-about-projects.jpg" width="250" alt="Проекты и справка"><br>
+<sub>Проекты и справка</sub>
+</td>
+<td align="center" valign="top" width="33%">
+<img src="docs/images/screens/08-experimental.jpg" width="250" alt="Экспериментальный режим"><br>
+<sub>Экспериментальный режим</sub>
+</td>
+</tr>
+</table>
+
 ## Установка
 
 1. Скачайте [APK последней версии](https://github.com/AveHarrisan/TG-WS-proxy-android/releases/latest/download/TG-WS-Proxy.apk) и установите его.
