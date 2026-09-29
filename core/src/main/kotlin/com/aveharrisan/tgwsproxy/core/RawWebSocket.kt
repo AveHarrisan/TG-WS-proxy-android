@@ -30,6 +30,9 @@ class RawWebSocket private constructor(private val socket: Socket, private val i
         }
     }
 
+    /** Сколько ждать данных от сервера; 0 — вечно. После рукопожатия стоит 0. */
+    fun setReadTimeout(ms: Int) { runCatching { socket.soTimeout = ms } }
+
     fun sendBatch(parts: List<ByteArray>) {
         if (closed) throw IOException("WebSocket закрыт")
         synchronized(writeLock) {

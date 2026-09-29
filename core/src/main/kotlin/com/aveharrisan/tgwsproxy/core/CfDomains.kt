@@ -114,6 +114,6 @@ object Balancer {
         return first + healthy.filter { it != current }.shuffled() + cooling.sortedBy { health[it]?.coolUntil ?: 0 }
     }
 
-    /** Для тестов. */
-    internal fun resetHealth() = health.clear()
+    /** Забыть отказы доменов — после смены сети они уже ничего не значат. */
+    fun resetHealth() = health.clear()
 }

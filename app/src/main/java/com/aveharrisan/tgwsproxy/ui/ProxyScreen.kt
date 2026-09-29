@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.ToggleOn
+import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,6 +72,7 @@ import com.aveharrisan.tgwsproxy.R
 import com.aveharrisan.tgwsproxy.Settings
 import com.aveharrisan.tgwsproxy.Status
 import com.aveharrisan.tgwsproxy.TileAdder
+import com.aveharrisan.tgwsproxy.Autostart
 import com.aveharrisan.tgwsproxy.core.Diagnostics
 import com.aveharrisan.tgwsproxy.core.Stats
 import com.aveharrisan.tgwsproxy.core.humanBytesRu
@@ -141,6 +143,7 @@ fun ProxyScreen(
             requestIgnoreBattery(ctx)
         }
         TileCard()
+        AutostartCard()
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -233,6 +236,29 @@ private fun WarnCard(icon: androidx.compose.ui.graphics.vector.ImageVector, text
             Spacer(Modifier.width(12.dp))
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
             TextButton(onClick = onClick) { Text(action) }
+        }
+    }
+}
+
+/** Xiaomi/HyperOS: без «Автозапуска» система выгружает прокси. Карточка до нажатия «Готово». */
+@Composable
+private fun AutostartCard() {
+    if (!Autostart.isXiaomi) return
+    val ctx = LocalContext.current
+    var done by remember { mutableStateOf(Autostart.isDone(ctx)) }
+    if (done) return
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.RocketLaunch, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.autostart_card), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer)
+            }
+            Row(Modifier.align(Alignment.End)) {
+                TextButton(onClick = { done = true; Autostart.markDone(ctx) }) { Text(stringResource(R.string.autostart_done)) }
+                TextButton(onClick = { Autostart.open(ctx) }) { Text(stringResource(R.string.autostart_open)) }
+            }
         }
     }
 }

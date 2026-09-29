@@ -107,6 +107,20 @@ class ProxyServer(config: ProxyConfig) {
     }
 
     @Synchronized
+    /**
+     * Сеть сменилась (Wi-Fi ↔ мобильная): соединения, открытые через старую сеть, мертвы, но об этом
+     * никто не знает. Делаем то же, что человек, переподключая интернет: закрываем соединения
+     * Telegram (он сразу откроет новые), сбрасываем пул, паузы и накопленные отказы доменов.
+     */
+    fun onNetworkChanged(what: String) {
+        if (!running) return
+        Log.i("Сеть сменилась ($what) — переподключаю соединения")
+        clients.forEach { runCatching { it.close() } }
+        wsBlacklist.clear(); dcFailUntil.clear(); ipFailUntil.clear()
+        wsPool.reset(); cfWorkerPool.reset(); Balancer.resetHealth()
+        wsPool.warmup(); cfWorkerPool.warmup()
+    }
+
     fun stop() {
         if (!running) return
         running = false

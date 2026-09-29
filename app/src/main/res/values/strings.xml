@@ -253,4 +253,8 @@
     <string name="cfdom_err_origin">Cloudflare не достучался до сервера — проверьте IP в записи</string>
     <string name="cfdom_err_cert">нет сертификата — проверьте, что облачко Proxied включено и домен уже активен в Cloudflare</string>
     <string name="cfdom_err_timeout">не отвечает — домен ещё не заработал или недоступен в этой сети</string>
+
+    <string name="autostart_card">Xiaomi выгружает прокси в фоне без разрешения «Автозапуск», даже когда экономия батареи отключена. Включите его для TG WS Proxy</string>
+    <string name="autostart_open">Открыть</string>
+    <string name="autostart_done">Готово</string>
 </resources>

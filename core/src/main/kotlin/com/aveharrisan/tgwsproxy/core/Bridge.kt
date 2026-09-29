@@ -81,6 +81,12 @@ class ClientConn(val socket: Socket, val input: InputStream, val output: OutputS
 class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWorkerPool) {
     private companion object {
         const val CF_CONNECT_TIMEOUT_MS = 6000
+        /**
+         * От сервера ничего столько времени — соединение считаем мёртвым и закрываем, Telegram откроет новое.
+         * Пинг WebSocket не шлём: сервер Telegram на него закрывает соединение (проверено 29.09.2026).
+         * Живое соединение Telegram сам держит своими пингами MTProto, так что 2 минуты тишины — это обрыв.
+         */
+        const val IDLE_TIMEOUT_MS = 120_000
     }
 
     fun doFallback(clt: ClientConn, relayInit: ByteArray, label: String, dc: Int, isTestDc: Boolean,
@@ -229,6 +235,9 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
         up.isDaemon = true
         up.start()
 
+        // Живость: 2 минуты от сервера ничего — соединение мёртвое (например, после смены сети).
+        ws.setReadTimeout(IDLE_TIMEOUT_MS)
+
         try {
             while (true) {
                 val data = ws.recv()
@@ -241,6 +250,8 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
                 clt.output.write(data)
                 clt.output.flush()
             }
+        } catch (e: java.net.SocketTimeoutException) {
+            reason.compareAndSet("normal", "upstream: нет ответа ${IDLE_TIMEOUT_MS / 1000} с")
         } catch (e: Exception) {
             reason.compareAndSet("normal", "upstream: ${e.javaClass.simpleName}")
         } finally {

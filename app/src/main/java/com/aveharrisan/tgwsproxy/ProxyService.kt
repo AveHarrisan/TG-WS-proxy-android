@@ -7,6 +7,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
@@ -37,6 +40,7 @@ class ProxyService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            RunMarker.set(this, false)
             stopProxy()
             stopSelf(startId)
             return START_NOT_STICKY
@@ -64,6 +68,8 @@ class ProxyService : Service() {
                 if (s.wakeLock) acquireLocks()
                 ProxyState.startedAt.value = System.currentTimeMillis()
                 ProxyState.status.value = Status.RUNNING
+                watchNetwork()
+                RunMarker.set(this, true)
                 tick = ticker.scheduleWithFixedDelay(::updateNotification, 0, 2, TimeUnit.SECONDS)
                 // Как KotaMusic: через минуту после старта и дальше по расписанию из «Настройки → Обновления».
                 if (updateCheck == null) updateCheck = ticker.scheduleWithFixedDelay({
@@ -89,7 +95,54 @@ class ProxyService : Service() {
         }, "proxy-start").start()
     }
 
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var currentNet: Network? = null
+    @Volatile private var netLost = false
+
+    /**
+     * Сеть по умолчанию сменилась (Wi-Fi ↔ мобильная) или вернулась после пропажи — старые соединения мертвы.
+     * Делаем то же, что человек, переподключая интернет: прокси закрывает их, Telegram сразу открывает новые.
+     */
+    private fun watchNetwork() {
+        if (netCallback != null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                val prev = currentNet
+                currentNet = network
+                if ((prev != null && prev != network) || netLost) {
+                    netLost = false
+                    val what = describe(cm, network)
+                    // Даём сети пару секунд устояться: сразу после переключения DNS и маршруты ещё не готовы.
+                    ticker.schedule({ server?.onNetworkChanged(what) }, 2, TimeUnit.SECONDS)
+                }
+            }
+            override fun onLost(network: Network) {
+                if (network == currentNet) netLost = true
+            }
+        }
+        runCatching { cm.registerDefaultNetworkCallback(cb) }.onSuccess { netCallback = cb }
+    }
+
+    private fun describe(cm: ConnectivityManager, n: Network): String {
+        val c = cm.getNetworkCapabilities(n) ?: return "сеть"
+        return when {
+            c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "теперь Wi-Fi"
+            c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "теперь мобильная"
+            c.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "теперь VPN"
+            else -> "другая сеть"
+        }
+    }
+
+    private fun unwatchNetwork() {
+        val cb = netCallback ?: return
+        runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) }
+        netCallback = null
+        currentNet = null
+    }
+
     private fun stopProxy() {
+        unwatchNetwork()
         tick?.cancel(false)
         server?.stop()
         server = null
@@ -185,6 +238,7 @@ class ProxyService : Service() {
 
         /** stopService разрешён всегда, в отличие от startService из фона. Прокси гасится в onDestroy. */
         fun stop(ctx: Context) {
+            RunMarker.set(ctx, false)
             ctx.stopService(Intent(ctx, ProxyService::class.java))
         }
 

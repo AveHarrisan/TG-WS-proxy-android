@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
         // не нарисованного экрана на части прошивок оставляло серый экран. Спрашиваем при
         // первом «Запустить прокси» и по кнопке «Разрешить» на карточке.
         checkNotif(ask = false)
+        RunMarker.restoreIfKilled(applicationContext)
         handleUpdateIntent(intent)
         setContent {
             AppTheme {
