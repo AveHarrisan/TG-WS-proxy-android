@@ -152,43 +152,40 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     }
 
     /**
-     * Подключение к датацентру: напрямую, а если не вышло — фронтингом (тот же IP, другое имя сайта в TLS).
-     * Провайдер может не только молчать (таймаут), но и обрывать TLS по имени kws*.web.telegram.org —
-     * поэтому фронтинг пробуем при любой ошибке, кроме переадресации. Если фронтинг сработал,
-     * дальше сразу идём через него, а прямой путь пробуем вторым: вдруг его снова открыли.
+     * Подключение к датацентру: напрямую и фронтингом (тот же IP, другое имя сайта в TLS) наперегонки.
+     * Провайдер может не только молчать (таймаут), но и обрывать TLS по имени kws*.web.telegram.org,
+     * а на некоторых сетях то один, то другой путь отваливается раз в пару минут. Первым стартует путь,
+     * сработавший в прошлый раз, второй — через [PathRace.STAGGER_MS]. Переадресация прямого пути —
+     * окончательный ответ, фронтингом её не обходим.
      * Бросает исходную ошибку прямого подключения, если не вышло ни так, ни так.
      */
     fun connect(targetIp: String, domain: String, timeoutMs: Int, path: String = Proto.WS_PATH): RawWebSocket {
-        // Флаг общий для всех соединений и может смениться, пока идёт прямая попытка, —
-        // поэтому помним, пробовало ли фронтинг именно это подключение.
-        var frontedTried = false
-        if (tryFrontingFirst) {
-            frontedTried = true
-            connectFronted(targetIp, domain, timeoutMs, path)?.let { return it }
+        val direct = { RawWebSocket.connect(targetIp, domain, timeoutMs, path) }
+        val fronted = { RawWebSocket.connect(targetIp, domain, minOf(timeoutMs, 7000), path, sni = FRONTING_SNI) }
+        val frontFirst = tryFrontingFirst
+        val r = if (frontFirst) PathRace.race(fronted, direct, isFinal = { false })
+            else PathRace.race(direct, fronted, isFinal = { it is WsHandshakeError && it.isRedirect })
+        val directFail = r.failures[if (frontFirst) 1 else 0]
+        val frontFail = r.failures[if (frontFirst) 0 else 1]
+        val ws = r.value ?: throw (directFail ?: frontFail)!!.error
+        val viaFronting = (r.winner == 0) == frontFirst
+        if (viaFronting) {
+            Stats.connectionsFronting.incrementAndGet()
+            if (!tryFrontingFirst) {
+                val why = directFail?.let { describe(it) } ?: "фронтинг ответил быстрее"
+                Log.i("Прямое WS-подключение к $targetIp не прошло ($why) — работаю через фронтинг")
+            }
+        } else if (tryFrontingFirst) {
+            val why = frontFail?.let { "фронтинг: ${describe(it)}" } ?: "ответило быстрее фронтинга"
+            Log.i("Прямое WS-подключение к $targetIp снова работает ($why)")
         }
-        try {
-            val ws = RawWebSocket.connect(targetIp, domain, timeoutMs, path)
-            if (tryFrontingFirst) Log.i("Прямое WS-подключение к $targetIp снова работает")
-            tryFrontingFirst = false
-            return ws
-        } catch (e: Exception) {
-            if (e is WsHandshakeError && e.isRedirect) throw e
-            if (!frontedTried) connectFronted(targetIp, domain, timeoutMs, path)?.let { return it }
-            throw e
-        }
-    }
-
-    private fun connectFronted(targetIp: String, domain: String, timeoutMs: Int = 7000, path: String = Proto.WS_PATH): RawWebSocket? {
-        val ws = try {
-            RawWebSocket.connect(targetIp, domain, minOf(timeoutMs, 7000), path, sni = FRONTING_SNI)
-        } catch (e: Exception) {
-            return null
-        }
-        Stats.connectionsFronting.incrementAndGet()
-        if (!tryFrontingFirst) Log.i("Прямое WS-подключение к $targetIp закрыто — работаю через фронтинг")
-        tryFrontingFirst = true
+        tryFrontingFirst = viaFronting
         return ws
     }
+
+    private fun describe(f: PathRace.Failure): String =
+        if (RawWebSocket.isTimeout(f.error)) "нет ответа ${f.ms} мс"
+        else "обрыв через ${f.ms} мс: ${f.error.javaClass.simpleName}${f.error.message?.let { ": " + it.take(80) } ?: ""}"
 
     fun warmup() {
         closed = false

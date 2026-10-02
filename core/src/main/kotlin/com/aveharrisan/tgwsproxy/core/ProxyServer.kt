@@ -329,7 +329,7 @@ class ProxyServer(config: ProxyConfig) {
     }
 
     companion object {
-        const val IP_FAIL_COOLDOWN = 3600.0
+        const val IP_FAIL_COOLDOWN = 300.0
         const val DC_FAIL_COOLDOWN = 60.0
         const val WS_FAIL_TIMEOUT_MS = 2000
     }
