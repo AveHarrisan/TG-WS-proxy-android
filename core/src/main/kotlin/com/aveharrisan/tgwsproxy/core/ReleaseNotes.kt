@@ -39,6 +39,8 @@ object ReleaseNotes {
             val y = b.getOrElse(i) { 0 }
             if (x != y) return x > y
         }
-        return false
+        // Числа равны: выпуск 1.1.11 новее беты 1.1.11-beta1 (а бету автообновление не видит вовсе:
+        // GitHub не отдаёт пред-выпуски в /releases/latest).
+        return !candidate.contains('-') && current.contains('-')
     }
 }

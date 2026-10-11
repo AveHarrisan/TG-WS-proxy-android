@@ -11,8 +11,10 @@ import java.util.concurrent.TimeUnit
 
 private fun now(): Double = System.nanoTime() / 1e9
 
-private data class PoolKey(val dc: Int, val isMedia: Boolean) {
-    override fun toString() = "DC$dc${if (isMedia) "m" else ""}"
+private data class PoolKey(val dc: Int, val isMedia: Boolean, val isTestDc: Boolean = false) {
+    val path: String get() = if (isTestDc) Proto.WS_PATH_TEST else Proto.WS_PATH
+    val domains: List<String> get() = Proto.wsDomains(dc, isMedia)
+    override fun toString() = "DC$dc${if (isTestDc) "t" else ""}${if (isMedia) "m" else ""}"
 }
 
 /** Заранее открытые WS-соединения к датацентрам: первое подключение Telegram не ждёт TLS-рукопожатия. */
@@ -25,14 +27,21 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
     private val refillFailures = ConcurrentHashMap<PoolKey, Int>()
     private val refillAfter = ConcurrentHashMap<PoolKey, Double>()
     @Volatile private var tryFrontingFirst = false
+    @Volatile private var directFailed = false
     /** После reset() прокси останавливается: новых задач не ставим, свежие соединения закрываем. */
     @Volatile private var closed = false
     private val idleGate = PoolIdle()
 
     private fun bucket(key: PoolKey) = idle.getOrPut(key) { ArrayDeque() }
 
-    fun get(dc: Int, isMedia: Boolean, targetIp: String, domains: List<String>): RawWebSocket? {
-        val key = PoolKey(dc, isMedia)
+    /**
+     * Готовое соединение или null — тогда сразу обходной путь. Сам ничего не открывает: ждать
+     * подключения к адресу, который сейчас не отвечает, Telegram не должен.
+     */
+    fun get(dc: Int, isMedia: Boolean, isTestDc: Boolean, targetIp: String): RawWebSocket? {
+        if (cfg().poolSize <= 0) return null
+        val key = PoolKey(dc, isMedia, isTestDc)
+        val domains = key.domains
         if (idleGate.markDemand(now())) Log.i("WS pool проснулся: Telegram открыл новое соединение")
         val b = bucket(key)
         while (true) {
@@ -41,7 +50,6 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
             if (age > MAX_AGE || !e.ws.isAlive) { quietClose(e.ws); continue }
             Stats.poolHits.incrementAndGet()
             Log.d("WS pool hit $key (age=${"%.1f".format(age)}s, left=${synchronized(b) { b.size }})")
-            reportSuccess(dc, isMedia)
             scheduleRefill(key, targetIp, domains)
             return e.ws
         }
@@ -50,8 +58,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         return null
     }
 
-    fun reportSuccess(dc: Int, isMedia: Boolean) {
-        val key = PoolKey(dc, isMedia)
+    private fun reportSuccess(key: PoolKey) {
         refillFailures.remove(key)
         refillAfter.remove(key)
     }
@@ -72,7 +79,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
             val needed = cfg().poolSize - synchronized(b) { b.size }
             if (needed <= 0) return
             val futures = try {
-                (0 until needed).map { io.submit<RawWebSocket?> { connectOne(targetIp, domains) } }
+                (0 until needed).map { io.submit<RawWebSocket?> { connectOne(targetIp, domains, key.path) } }
             } catch (e: RejectedExecutionException) {
                 return
             }
@@ -85,13 +92,18 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
                 connected++
                 scheduleRotation(key, targetIp, domains)
             }
-            if (connected > 0) reportSuccess(key.dc, key.isMedia)
+            if (connected > 0) {
+                if ((refillFailures[key] ?: 0) >= 3) Log.i("WS pool $key снова пополняется")
+                reportSuccess(key)
+            }
             else {
                 val failures = (refillFailures[key] ?: 0) + 1
                 refillFailures[key] = failures
                 val delay = minOf(1.0 * (1 shl minOf(failures - 1, 12)), 3600.0)
                 refillAfter[key] = now() + delay
-                Log.i("WS pool refill failed for $key, retry in ${delay.toInt()}s")
+                // В журнал — первый отказ подряд и дальше реже (раз в ~минуту): раньше ~950 строк за сутки.
+                val msg = "WS pool refill failed for $key, retry in ${delay.toInt()}s"
+                if (failures == 1 || delay >= 64) Log.i(msg) else Log.d(msg)
             }
             Log.d("WS pool refilled $key: ${synchronized(b) { b.size }} ready")
         } finally {
@@ -137,10 +149,10 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         if (size < cfg().poolSize) scheduleRefill(key, targetIp, domains)
     }
 
-    private fun connectOne(targetIp: String, domains: List<String>): RawWebSocket? {
+    private fun connectOne(targetIp: String, domains: List<String>, path: String): RawWebSocket? {
         for (domain in domains) {
             try {
-                return connect(targetIp, domain, 8000)
+                return connect(targetIp, domain, 8000, path)
             } catch (e: WsHandshakeError) {
                 if (e.isRedirect) continue
                 return null
@@ -169,17 +181,22 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         val frontFail = r.failures[if (frontFirst) 0 else 1]
         val ws = r.value ?: throw (directFail ?: frontFail)!!.error
         val viaFronting = (r.winner == 0) == frontFirst
-        if (viaFronting) {
-            Stats.connectionsFronting.incrementAndGet()
-            if (!tryFrontingFirst) {
-                val why = directFail?.let { describe(it) } ?: "фронтинг ответил быстрее"
-                Log.i("Прямое WS-подключение к $targetIp не прошло ($why) — работаю через фронтинг")
-            }
-        } else if (tryFrontingFirst) {
-            val why = frontFail?.let { "фронтинг: ${describe(it)}" } ?: "ответило быстрее фронтинга"
-            Log.i("Прямое WS-подключение к $targetIp снова работает ($why)")
-        }
+        if (viaFronting) Stats.connectionsFronting.incrementAndGet()
         tryFrontingFirst = viaFronting
+        // В журнал — только когда прямой путь действительно отказал или ожил после отказа. То, что
+        // фронтинг иногда отвечает быстрее живого прямого, — не событие: раньше это давало ~1400 строк
+        // «снова работает / не прошло» за сутки, и за ними терялось важное.
+        // Фронтинг выиграл, а прямой ещё не ответил — о прямом ничего не знаем, состояние не трогаем.
+        val directDown = when {
+            !viaFronting -> false
+            directFail != null -> true
+            else -> directFailed
+        }
+        if (directDown != directFailed) {
+            directFailed = directDown
+            if (directDown) Log.i("Прямое WS-подключение к $targetIp не прошло (${describe(directFail!!)}) — работаю через фронтинг")
+            else Log.i("Прямое WS-подключение к $targetIp снова работает")
+        } else if (viaFronting != frontFirst) Log.d("WS к $targetIp: ${if (viaFronting) "фронтинг" else "прямой"} ответил быстрее")
         return ws
     }
 
@@ -191,7 +208,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         closed = false
         val c = cfg()
         for ((dc, ip) in c.dcRedirects) for (isMedia in listOf(false, true))
-            scheduleRefill(PoolKey(dc, isMedia), ip, Proto.wsDomains(dc, isMedia))
+            PoolKey(dc, isMedia, c.forceTestDc).let { scheduleRefill(it, ip, it.domains) }
         Log.i("WS pool warmup started for ${c.dcRedirects.size} DC(s)")
     }
 
@@ -205,6 +222,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         refillFailures.clear()
         refillAfter.clear()
         tryFrontingFirst = false
+        directFailed = false
     }
 
     private fun quietClose(ws: RawWebSocket) {

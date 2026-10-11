@@ -16,7 +16,11 @@ data class ProxyConfig(
     val disableSecure: Boolean = false,
     val fakeTlsDomain: String = "",
     val forceTestDc: Boolean = false,
+    /** Медиа через CF-прокси одним HTTP/2-соединением на домен (у Flowseal включено по умолчанию). */
+    val cfProxyH2Media: Boolean = true,
 ) {
+    val h2Enabled: Boolean get() = cfProxyH2Media && fallbackCfProxy && !disableSecure && !forceTestDc
+
     val secretBytes: ByteArray get() = secret.hexToBytes()
 
     fun validate() {

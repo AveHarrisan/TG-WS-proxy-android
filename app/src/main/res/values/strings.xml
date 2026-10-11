@@ -62,6 +62,8 @@
     <string name="btn_reset_dc">Вернуть по умолчанию</string>
     <string name="label_cf">Cloudflare-прокси</string>
     <string name="hint_cf">Запасной путь для датацентров, до которых нет прямого доступа</string>
+    <string name="label_cf_h2">Медиа одним соединением (HTTP/2)</string>
+    <string name="hint_cf_h2">Фото и видео через Cloudflare идут внутри одного общего соединения, а не открывают по новому на каждый файл. Нужны Cloudflare-прокси и TLS</string>
     <string name="label_cf_domains">Свои домены CF-прокси</string>
     <string name="hint_cf_domains">Через запятую. Пусто — общий список, он обновляется сам</string>
     <string name="label_worker">Домены Cloudflare Worker</string>

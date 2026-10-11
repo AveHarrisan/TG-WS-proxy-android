@@ -13,6 +13,11 @@ class ReleaseNotesTest {
         assertTrue(ReleaseNotes.isNewer("1.0.1", "1.0"))
         assertFalse(ReleaseNotes.isNewer("1.1.0", "1.1.0"))
         assertFalse(ReleaseNotes.isNewer("1.0.9", "1.1.0"))
+        // Бета: выпуск той же версии новее беты, бета не новее выпуска, 1.1.10 не «обновляет» бету 1.1.11.
+        assertTrue(ReleaseNotes.isNewer("1.1.11", "1.1.11-beta1"))
+        assertFalse(ReleaseNotes.isNewer("1.1.11-beta1", "1.1.11"))
+        assertFalse(ReleaseNotes.isNewer("1.1.10", "1.1.11-beta1"))
+        assertTrue(ReleaseNotes.isNewer("1.1.11-beta1", "1.1.10"))
     }
 
     @Test

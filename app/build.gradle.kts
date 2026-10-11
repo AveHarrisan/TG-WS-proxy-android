@@ -20,8 +20,8 @@ android {
         applicationId = "com.aveharrisan.tgwsproxy"
         minSdk = 24
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.1.10"
+        versionCode = 13
+        versionName = "1.1.11-beta1"
     }
 
     signingConfigs {

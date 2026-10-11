@@ -32,9 +32,6 @@ class ProxyServer(config: ProxyConfig) {
     private val cfWorkerPool = CfWorkerPool({ this.config }, io)
     private val bridge = Bridge({ this.config }, cfWorkerPool)
 
-    private val wsBlacklist = ConcurrentHashMap.newKeySet<String>()
-    private val dcFailUntil = ConcurrentHashMap<String, Double>()
-    private val ipFailUntil = ConcurrentHashMap<String, Double>()
     private val clients = ConcurrentHashMap.newKeySet<Socket>()
 
     @Volatile private var server: ServerSocket? = null
@@ -60,15 +57,14 @@ class ProxyServer(config: ProxyConfig) {
         config.validate()
         Net.bufferSize = config.bufferSize
         Stats.reset()
-        wsBlacklist.clear(); dcFailUntil.clear(); ipFailUntil.clear()
+        bridge.reset()
         server = bind()
         running = true
 
         CfDomains.startRefresh(sched, config)
         logBanner()
         sched.scheduleWithFixedDelay({
-            val bl = wsBlacklist.sorted().joinToString(", ") { "DC$it" }.ifEmpty { "none" }
-            Log.d("stats: ${Stats.summary()} | ws_bl: $bl")
+            Log.d("stats: ${Stats.summary()}")
         }, 60, 60, TimeUnit.SECONDS)
         wsPool.warmup()
         cfWorkerPool.warmup()
@@ -116,7 +112,7 @@ class ProxyServer(config: ProxyConfig) {
         if (!running) return
         Log.i("Сеть сменилась ($what) — переподключаю соединения")
         clients.forEach { runCatching { it.close() } }
-        wsBlacklist.clear(); dcFailUntil.clear(); ipFailUntil.clear()
+        bridge.reset()
         wsPool.reset(); cfWorkerPool.reset(); Balancer.resetHealth()
         wsPool.warmup(); cfWorkerPool.warmup()
     }
@@ -131,6 +127,7 @@ class ProxyServer(config: ProxyConfig) {
         clients.clear()
         wsPool.reset()
         cfWorkerPool.reset()
+        bridge.close()
         sched.shutdownNow()
         io.shutdownNow()
         Log.i("Прокси остановлен. Итог: ${Stats.summary()}")
@@ -230,88 +227,22 @@ class ProxyServer(config: ProxyConfig) {
 
             val relayInit = Obfuscation.generateRelayInit(hs.protoTag, dcIdx)
             val ctx = Obfuscation.buildCryptoCtx(hs.prekeyAndIv, secret, relayInit)
-            val dcKey = "$dc${if (isTestDc) "t" else ""}${if (isMedia) "m" else ""}"
             val mediaTag = if (isMedia) " media" else ""
-            val t = now()
-            val wsPath = if (isTestDc) Proto.WS_PATH_TEST else Proto.WS_PATH
-            val target = c.dcRedirects[dc]
-            val anyCf = c.fallbackCfProxy || c.cfProxyWorkerDomains.isNotEmpty()
-            val domains = Proto.wsDomains(dc, isMedia)
-            var ws: RawWebSocket? = null
             fun splitter() = runCatching { MsgSplitter(relayInit, hs.protoTag) }.getOrNull()
 
-            if (target == null || dcKey in wsBlacklist || (t < (ipFailUntil[target] ?: 0.0) && anyCf)) {
-                when {
-                    target == null -> Log.d("[$label] DC$dc нет в настройках -> fallback")
-                    dcKey in wsBlacklist -> Log.d("[$label] DC$dc$mediaTag WS в чёрном списке -> fallback")
-                    else -> {
-                        ws = if (!isTestDc) wsPool.get(dc, isMedia, target, domains) else null
-                        Log.d("[$label] DC$dc$mediaTag WS до $target недавно не отвечал" +
-                            if (ws == null) " -> fallback" else ", но есть готовое соединение в пуле")
-                    }
-                }
-                if (ws == null) {
-                    if (!bridge.doFallback(init.conn, relayInit, label, dc, isTestDc, isMedia, ctx, splitter()))
-                        Log.w("[$label] DC$dc$mediaTag обходных путей не осталось")
-                    return
-                }
-            }
-            target!!
-
-            val wsTimeout = if (t < (dcFailUntil[dcKey] ?: 0.0)) WS_FAIL_TIMEOUT_MS else 5000
-            var failedRedirect = false
-            var timedOut = false
-            var allRedirects = true
-
-            if (ws == null && !isTestDc) ws = wsPool.get(dc, isMedia, target, domains)
-            if (ws != null) Log.d("[$label] DC$dc$mediaTag -> pool hit via $target")
-            else for (domain in domains) {
-                Log.d("[$label] DC$dc$mediaTag -> wss://$domain$wsPath via $target")
-                try {
-                    // Напрямую, а при неудаче — фронтингом (раньше фронтинг умел только пул).
-                    ws = wsPool.connect(target, domain, wsTimeout, wsPath)
-                    allRedirects = false
-                    break
-                } catch (e: WsHandshakeError) {
-                    Stats.wsErrors.incrementAndGet()
-                    if (e.isRedirect) {
-                        failedRedirect = true
-                        Log.w("[$label] DC$dc$mediaTag got ${e.statusCode} from $domain -> ${e.location ?: "?"}")
-                        continue
-                    }
-                    allRedirects = false
-                    Log.w("[$label] DC$dc$mediaTag WS handshake: ${e.statusLine}")
-                } catch (e: Exception) {
-                    Stats.wsErrors.incrementAndGet()
-                    if (RawWebSocket.isTimeout(e)) {
-                        timedOut = true
-                        Log.w("[$label] DC$dc$mediaTag WS connect timed out via $domain")
-                        break
-                    }
-                    allRedirects = false
-                    Log.w("[$label] DC$dc$mediaTag WS connect failed: $e")
-                }
-            }
-
+            // Прямой WS — только готовое соединение из пула. Пусто — сразу обходной путь, не ждём таймаута:
+            // раньше на сети, где IP Telegram закрыт, каждое новое соединение висело 5 с («тупит», 12.10.2026).
+            // Пул пополняется в фоне и сам реже стучится к адресу, который не отвечает (как у Flowseal с 04.10.2026).
+            val target = c.dcRedirects[dc]
+            val ws = if (target != null) wsPool.get(dc, isMedia, isTestDc, target) else null
             if (ws == null) {
-                if (timedOut) {
-                    ipFailUntil[target] = t + IP_FAIL_COOLDOWN
-                    Log.i("[$label] DC$dc$mediaTag $target не отвечает, пауза ${IP_FAIL_COOLDOWN.toInt()}s")
-                }
-                if (failedRedirect && allRedirects) {
-                    wsBlacklist += dcKey
-                    Log.w("[$label] DC$dc$mediaTag WS в чёрном списке (все 302)")
-                } else {
-                    dcFailUntil[dcKey] = t + DC_FAIL_COOLDOWN
-                    if (!failedRedirect) Log.i("[$label] DC$dc$mediaTag WS не работает, пауза ${DC_FAIL_COOLDOWN.toInt()}s")
-                }
-                if (bridge.doFallback(init.conn, relayInit, label, dc, isTestDc, isMedia, ctx, splitter()))
-                    Log.i("[$label] DC$dc$mediaTag fallback закрыт")
+                Log.d("[$label] DC$dc$mediaTag ${if (target == null) "нет в настройках" else "в пуле нет готового WS"} -> fallback")
+                if (bridge.doFallback(init.conn, relayInit, label, dc, isTestDc, isMedia, ctx, splitter(), hs.protoTag))
+                    Log.d("[$label] DC$dc$mediaTag fallback закрыт")
+                else Log.w("[$label] DC$dc$mediaTag обходных путей не осталось")
                 return
             }
-
-            ipFailUntil.remove(target)
-            wsPool.reportSuccess(dc, isMedia)
+            Log.d("[$label] DC$dc$mediaTag -> WS pool hit via $target")
             Stats.connectionsWs.incrementAndGet()
             ws.send(relayInit)
             bridge.bridgeWs(init.conn, ws, label, ctx, dc, isMedia, splitter())
@@ -328,9 +259,4 @@ class ProxyServer(config: ProxyConfig) {
         }
     }
 
-    companion object {
-        const val IP_FAIL_COOLDOWN = 300.0
-        const val DC_FAIL_COOLDOWN = 60.0
-        const val WS_FAIL_TIMEOUT_MS = 2000
-    }
 }

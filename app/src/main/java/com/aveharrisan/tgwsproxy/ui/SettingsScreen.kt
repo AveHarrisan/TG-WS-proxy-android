@@ -143,6 +143,8 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
             trailingIcon = { IconButton(onClick = { onOpenHelp(HelpTopic.WORKER) }) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.worker_how)) } },
             supportingText = { Text(if (workerErr != null) stringResource(R.string.err_domain, workerErr) else stringResource(R.string.hint_worker)) })
         WorkerCheck(s.cfWorkerDomains, secure = !s.noSecure, enabled = workerErr == null)
+        SwitchRow(stringResource(R.string.label_cf_h2), stringResource(R.string.hint_cf_h2), s.cfH2 && s.cfProxy && !s.noSecure,
+            enabled = s.cfProxy && !s.noSecure) { s = s.copy(cfH2 = it) }
         SwitchRow(stringResource(R.string.label_nosecure), stringResource(R.string.hint_nosecure), s.noSecure) { s = s.copy(noSecure = it) }
 
         Section(stringResource(R.string.sec_advanced))
@@ -353,13 +355,13 @@ private fun TileRow() {
 }
 
 @Composable
-private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(title: String, hint: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(12.dp))
-        Switch(checked, onChange)
+        Switch(checked, onChange, enabled = enabled)
     }
 }

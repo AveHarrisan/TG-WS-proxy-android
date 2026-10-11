@@ -18,6 +18,8 @@ data class AppSettings(
     val cfProxy: Boolean = true,
     val cfDomains: String = "",
     val cfWorkerDomains: String = "",
+    /** Медиа через CF-прокси одним соединением HTTP/2. */
+    val cfH2: Boolean = true,
     val poolSize: Int = 4,
     val noSecure: Boolean = false,
     val allowLan: Boolean = false,
@@ -37,6 +39,7 @@ data class AppSettings(
         fallbackCfProxy = cfProxy,
         cfProxyUserDomains = Domains.coerceList(cfDomains),
         cfProxyWorkerDomains = Domains.coerceList(cfWorkerDomains),
+        cfProxyH2Media = cfH2,
         disableSecure = noSecure,
         fakeTlsDomain = fakeTlsDomain.trim(),
     ).also { it.validate() }
@@ -66,6 +69,7 @@ object Settings {
             secret = secret,
             dcIps = prefs.getString("dcIps", d.dcIps)!!,
             cfProxy = prefs.getBoolean("cfProxy", d.cfProxy),
+            cfH2 = prefs.getBoolean("cfH2", d.cfH2),
             cfDomains = prefs.getString("cfDomains", d.cfDomains)!!,
             cfWorkerDomains = prefs.getString("cfWorkerDomains", d.cfWorkerDomains)!!,
             poolSize = prefs.getInt("poolSize", d.poolSize),
@@ -85,6 +89,7 @@ object Settings {
             .putString("secret", s.secret)
             .putString("dcIps", s.dcIps)
             .putBoolean("cfProxy", s.cfProxy)
+            .putBoolean("cfH2", s.cfH2)
             .putString("cfDomains", s.cfDomains)
             .putString("cfWorkerDomains", s.cfWorkerDomains)
             .putInt("poolSize", s.poolSize)

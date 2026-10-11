@@ -14,10 +14,10 @@ class PoolShutdownTest {
         sched.shutdownNow()
         io.shutdownNow()
         // Раньше здесь летел RejectedExecutionException из scheduleRefill.
-        assertNull(pool.get(2, false, "127.0.0.1", listOf("kws2.web.telegram.org")))
+        assertNull(pool.get(2, false, false, "127.0.0.1"))
         pool.warmup()
         pool.reset()
-        assertNull(pool.get(4, true, "127.0.0.1", listOf("kws4-1.web.telegram.org")))
+        assertNull(pool.get(4, true, false, "127.0.0.1"))
     }
 
     @Test

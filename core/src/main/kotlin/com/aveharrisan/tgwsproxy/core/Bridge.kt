@@ -4,6 +4,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Режет поток MTProto-транспорта на отдельные пакеты, чтобы каждый ушёл своим WS-кадром
@@ -89,8 +90,31 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
         const val IDLE_TIMEOUT_MS = 120_000
     }
 
+    /**
+     * Запасной TCP напрямую к датацентру: после отказа пауза 30 с, дальше вдвое дольше до часа, и только одна
+     * попытка за раз. Раньше каждое соединение Telegram заново ждало 10 с таймаута к адресу, который
+     * у провайдера закрыт (как у Flowseal с 04.10.2026).
+     */
+    private val tcpFailures = ConcurrentHashMap<String, Int>()
+    private val tcpRetryAfter = ConcurrentHashMap<String, Long>()
+    private val tcpConnecting = ConcurrentHashMap.newKeySet<String>()
+
+    /** Пустые медиа-соединения через Cloudflare по HTTP/2; null — выключено. */
+    @Volatile private var h2: CfH2Pool? = null
+
+    /** Новый запуск прокси или смена сети: паузы TCP забываем, HTTP/2 открываем заново. */
+    fun reset() {
+        tcpFailures.clear(); tcpRetryAfter.clear(); tcpConnecting.clear()
+        h2?.close()
+        h2 = if (cfg().h2Enabled) CfH2Pool() else null
+    }
+
+    fun close() {
+        h2?.close(); h2 = null
+    }
+
     fun doFallback(clt: ClientConn, relayInit: ByteArray, label: String, dc: Int, isTestDc: Boolean,
-                   isMedia: Boolean, ctx: CryptoCtx, splitter: MsgSplitter?): Boolean {
+                   isMedia: Boolean, ctx: CryptoCtx, splitter: MsgSplitter?, protoTag: Int): Boolean {
         val c = cfg()
         val mediaTag = if (isMedia) " media" else ""
         val dst = (if (isTestDc) Proto.DC_TEST_IPS else Proto.DC_DEFAULT_IPS)[dc]
@@ -102,11 +126,9 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
         for (m in methods) {
             val ok = when (m) {
                 "cf_worker" -> cfWorkerFallback(clt, relayInit, label, ctx, dc, isTestDc, isMedia, dst!!)
-                "cf" -> cfProxyFallback(clt, relayInit, label, ctx, dc, isMedia, splitter)
-                else -> {
-                    Log.d("[$label] DC$dc$mediaTag -> TCP fallback to $dst:443")
-                    tcpFallback(clt, dst!!, 443, relayInit, label, ctx)
-                }
+                "cf" -> h2Media(clt, label, ctx, dc, isMedia, protoTag) ||
+                    cfProxyFallback(clt, relayInit, label, ctx, dc, isMedia, splitter)
+                else -> tcpFallback(clt, dst!!, 443, relayInit, label, ctx)
             }
             if (ok) return true
         }
@@ -152,13 +174,37 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
         return true
     }
 
+    /** Медиа через общее HTTP/2-соединение к Cloudflare (у Flowseal с 04.10.2026). false — не вышло, дальше WS. */
+    private fun h2Media(clt: ClientConn, label: String, ctx: CryptoCtx, dc: Int, isMedia: Boolean, protoTag: Int): Boolean {
+        val pool = h2 ?: return false
+        if (!isMedia) return false
+        val channel = pool.open(dc, label) ?: return false
+        Stats.connectionsH2.incrementAndGet()
+        Stats.connectionsCfProxy.incrementAndGet()
+        CfH2.bridge(clt, channel, ctx, protoTag)
+        return true
+    }
+
     private fun tcpFallback(clt: ClientConn, dst: String, port: Int, relayInit: ByteArray, label: String, ctx: CryptoCtx): Boolean {
-        val remote = try {
-            Socket().also { Net.tune(it); it.connect(InetSocketAddress(dst, port), 10_000) }
-        } catch (e: Exception) {
-            Log.w("[$label] TCP fallback to $dst:$port failed: $e")
+        val key = "$dst:$port"
+        if (System.nanoTime() < (tcpRetryAfter[key] ?: Long.MIN_VALUE) || !tcpConnecting.add(key)) {
+            Log.d("[$label] TCP fallback to $key пропущен (пауза после отказа или уже подключаемся)")
             return false
         }
+        val remote = try {
+            Log.d("[$label] TCP fallback to $key")
+            Socket().also { Net.tune(it); it.connect(InetSocketAddress(dst, port), 10_000) }
+        } catch (e: Exception) {
+            val failures = (tcpFailures[key] ?: 0) + 1
+            tcpFailures[key] = failures
+            val delaySec = minOf(30L shl minOf(failures - 1, 7), 3600L)
+            tcpRetryAfter[key] = System.nanoTime() + delaySec * 1_000_000_000L
+            Log.w("[$label] TCP fallback to $key failed: $e; следующая попытка через ${delaySec}s")
+            return false
+        } finally {
+            tcpConnecting.remove(key)
+        }
+        tcpFailures.remove(key); tcpRetryAfter.remove(key)
         Stats.connectionsTcpFallback.incrementAndGet()
         val rOut = remote.getOutputStream()
         rOut.write(relayInit); rOut.flush()
