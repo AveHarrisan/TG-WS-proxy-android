@@ -93,7 +93,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
                 scheduleRotation(key, targetIp, domains)
             }
             if (connected > 0) {
-                if ((refillFailures[key] ?: 0) >= 3) Log.i("WS pool $key снова пополняется")
+                if ((refillFailures[key] ?: 0) >= 7) Log.i("WS pool $key снова пополняется")
                 reportSuccess(key)
             }
             else {
@@ -101,9 +101,10 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
                 refillFailures[key] = failures
                 val delay = minOf(1.0 * (1 shl minOf(failures - 1, 12)), 3600.0)
                 refillAfter[key] = now() + delay
-                // В журнал — первый отказ подряд и дальше реже (раз в ~минуту): раньше ~950 строк за сутки.
+                // В журнал — только затяжные отказы (с седьмого подряд, пауза от минуты): на Wi-Fi с капризным
+                // прямым адресом пул то пополняется, то нет, и каждая такая строка была шумом.
                 val msg = "WS pool refill failed for $key, retry in ${delay.toInt()}s"
-                if (failures == 1 || delay >= 64) Log.i(msg) else Log.d(msg)
+                if (delay >= 64) Log.i(msg) else Log.d(msg)
             }
             Log.d("WS pool refilled $key: ${synchronized(b) { b.size }} ready")
         } finally {

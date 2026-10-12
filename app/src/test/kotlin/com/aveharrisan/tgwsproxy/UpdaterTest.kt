@@ -11,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.aveharrisan.tgwsproxy.core.ReleaseNotes
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
@@ -30,13 +31,15 @@ class UpdaterTest {
     private var latest: Pair<Int, String> = 200 to ""
     private var apkBytes = ByteArray(0)
     private var webDown = false
+    /** Свои ответы для отдельных тестов: путь → ответ. */
+    private val routes = mutableMapOf<String, () -> MockResponse>()
 
     @Before
     fun setUp() {
         ctx = ApplicationProvider.getApplicationContext()
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+            override fun dispatch(request: RecordedRequest): MockResponse = routes[request.path]?.invoke() ?: when (request.path) {
                 // Страница «последний выпуск» и CHANGELOG — путь без лимита API.
                 "/web/latest" -> if (webDown) MockResponse().setResponseCode(500)
                     else MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v9.9.9")
@@ -57,9 +60,13 @@ class UpdaterTest {
         Updater.webLatest = ""
         Updater.webBase = "$base/web"
         Updater.rawBase = "$base/raw"
+        Updater.webFeed = ""
+        Updater.apiList = "$base/list"
         Updater.setStatus(UpdateStatus.Idle)
         // Настройки в SharedPreferences у каждого теста свои — подтягиваем их и сбрасываем «отложено».
         Updater.loadPrefs(ctx)
+        // Сама сборка — бета, и по умолчанию была бы в бета-канале; старые тесты — про стабильный.
+        Updater.savePrefs(ctx, Updater.Prefs())
     }
 
     @After
@@ -253,5 +260,94 @@ class UpdaterTest {
         latest = 200 to release("v9.9.8")
         Updater.check(ctx, manual = true)
         assertEquals("9.9.8", (Updater.status.value as UpdateStatus.Available).release.version)
+    }
+
+    private fun feed(vararg versions: String) = "<feed>" + versions.joinToString("") {
+        "<entry><link rel=\"alternate\" type=\"text/html\" href=\"https://github.com/A/B/releases/tag/v$it\"/></entry>"
+    } + "</feed>"
+
+    @Test
+    fun betaChannelTakesNewestFromFeed() = runBlocking {
+        Updater.savePrefs(ctx, Updater.Prefs(beta = true))
+        Updater.webFeed = "$base/web/feed"
+        routes["/web/feed"] = { MockResponse().setBody(feed("9.9.9-beta2", "9.9.9-beta10", "9.9.8")) }
+        Updater.check(ctx, manual = true)
+        val r = (Updater.status.value as UpdateStatus.Available).release
+        assertEquals("9.9.9-beta10", r.version)
+        assertEquals("$base/web/releases/download/v9.9.9-beta10/TG-WS-Proxy-9.9.9-beta10.apk", r.apkUrl)
+    }
+
+    @Test
+    fun betaChannelOffersStableWhenItIsNewer() = runBlocking {
+        Updater.savePrefs(ctx, Updater.Prefs(beta = true))
+        Updater.webFeed = "$base/web/feed"
+        routes["/web/feed"] = { MockResponse().setBody(feed("9.9.9", "9.9.9-beta3")) }
+        Updater.check(ctx, manual = true)
+        val r = (Updater.status.value as UpdateStatus.Available).release
+        assertEquals("9.9.9", r.version)
+        assertTrue(r.apkUrl.endsWith("/v9.9.9/TG-WS-Proxy.apk"))
+    }
+
+    @Test
+    fun betaChannelFallsBackToApiList() = runBlocking {
+        Updater.savePrefs(ctx, Updater.Prefs(beta = true))
+        Updater.webFeed = "$base/web/feed"
+        routes["/web/feed"] = { MockResponse().setResponseCode(500) }
+        routes["/list"] = { MockResponse().setBody("[" + release("v9.9.8") + "," + release("v9.9.9-beta1") + "]") }
+        Updater.check(ctx, manual = true)
+        assertEquals("9.9.9-beta1", (Updater.status.value as UpdateStatus.Available).release.version)
+    }
+
+    @Test
+    fun stableChannelIgnoresBeta() = runBlocking {
+        Updater.webLatest = "$base/web/latest"
+        Updater.webFeed = "$base/web/feed"
+        routes["/web/feed"] = { MockResponse().setBody(feed("9.9.10-beta1", "9.9.9")) }
+        Updater.check(ctx, manual = true)
+        assertEquals("9.9.9", (Updater.status.value as UpdateStatus.Available).release.version)
+    }
+
+    @Test
+    fun rollbackOffersRebuiltStableAndLeavesBeta() = runBlocking {
+        assertTrue("тест рассчитан на бета-сборку", ReleaseNotes.isBeta(BuildConfig.VERSION_NAME))
+        Updater.savePrefs(ctx, Updater.Prefs(beta = true))
+        Updater.webLatest = "$base/web/latest"
+        routes["/web/latest"] = { MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v1.0.0") }
+        routes["/web/releases/download/v${BuildConfig.VERSION_NAME}/TG-WS-Proxy-rollback.apk"] =
+            { MockResponse().setHeader("Content-Length", "4321") }
+        Updater.rollback(ctx)
+        val r = (Updater.status.value as UpdateStatus.Available).release
+        assertTrue(r.rollback)
+        assertEquals("1.0.0", r.version)
+        assertEquals("$base/web/releases/download/v${BuildConfig.VERSION_NAME}/TG-WS-Proxy-rollback.apk", r.apkUrl)
+        assertEquals(4321L, r.apkSize)
+        assertFalse("после отката беты больше не предлагаем", Updater.prefsFlow.value.beta)
+    }
+
+    @Test
+    fun rollbackWithoutFileExplains() = runBlocking {
+        Updater.webLatest = "$base/web/latest"
+        routes["/web/latest"] = { MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v1.0.0") }
+        Updater.rollback(ctx)
+        val s = Updater.status.value
+        assertTrue("$s", s is UpdateStatus.Failed && s.message.contains("файла отката"))
+    }
+
+    @Test
+    fun rollbackIsPlainUpdateWhenStableIsNewer() = runBlocking {
+        Updater.webLatest = "$base/web/latest"
+        Updater.rollback(ctx)
+        val r = (Updater.status.value as UpdateStatus.Available).release
+        assertEquals("9.9.9", r.version)
+        assertFalse(r.rollback)
+    }
+
+    @Test
+    fun rollbackApkIsSkippedAsUpdateFile() = runBlocking {
+        latest = 200 to """{"tag_name":"v9.9.9","body":"","assets":[
+            {"name":"TG-WS-Proxy-rollback.apk","browser_download_url":"$base/rb.apk","size":1},
+            {"name":"TG-WS-Proxy-9.9.9.apk","browser_download_url":"$base/download/app.apk","size":2}]}"""
+        Updater.check(ctx, manual = true)
+        assertEquals("$base/download/app.apk", (Updater.status.value as UpdateStatus.Available).release.apkUrl)
     }
 }

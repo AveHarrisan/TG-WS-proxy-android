@@ -54,6 +54,8 @@ class ScreensTest {
 
     @Test fun updateAvailable() { Updater.setStatus(UpdateStatus.Available(release)); screen { ProxyScreen(Modifier, true, {}, {}) }; shot("update_available") }
 
+    @Test fun updateRollback() { Updater.setStatus(UpdateStatus.Available(release.copy(version = "1.1.10", apkSize = 0, rollback = true))); screen { }; shot("update_rollback") }
+
     @Test fun updateDownloading() { Updater.setStatus(UpdateStatus.Downloading(release, 42)); screen { }; shot("update_downloading") }
 
     @Test fun updateFailed() {

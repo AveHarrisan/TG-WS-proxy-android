@@ -30,17 +30,33 @@ object ReleaseNotes {
         Regex("/releases/tag/v?([0-9][0-9A-Za-z.\\-]*)").find(url)?.groupValues?.get(1)
 
     /** 1.10.0 новее 1.9.2: сравниваем по числам, а не строкой. */
-    fun isNewer(candidate: String, current: String): Boolean {
+    fun isNewer(candidate: String, current: String): Boolean = compare(candidate, current) > 0
+
+    /** Бета — версия с суффиксом после дефиса: 1.1.11-beta2. */
+    fun isBeta(version: String): Boolean = version.removePrefix("v").contains('-')
+
+    /**
+     * Порядок версий: числа, затем выпуск без суффикса новее беты с теми же числами
+     * (1.1.11 > 1.1.11-beta2), а беты между собой — по номеру (beta10 > beta2).
+     */
+    fun compare(a: String, b: String): Int {
         fun parts(v: String) = v.removePrefix("v").substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
-        val a = parts(candidate)
-        val b = parts(current)
-        for (i in 0 until maxOf(a.size, b.size)) {
-            val x = a.getOrElse(i) { 0 }
-            val y = b.getOrElse(i) { 0 }
-            if (x != y) return x > y
+        val x = parts(a)
+        val y = parts(b)
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val c = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 })
+            if (c != 0) return c
         }
-        // Числа равны: выпуск 1.1.11 новее беты 1.1.11-beta1 (а бету автообновление не видит вовсе:
-        // GitHub не отдаёт пред-выпуски в /releases/latest).
-        return !candidate.contains('-') && current.contains('-')
+        val sa = a.removePrefix("v").substringAfter('-', "")
+        val sb = b.removePrefix("v").substringAfter('-', "")
+        if (sa.isEmpty() || sb.isEmpty()) return (if (sa.isEmpty()) 1 else 0) - (if (sb.isEmpty()) 1 else 0)
+        fun split(s: String) = Regex("^(.*?)(\\d*)$").find(s)!!.destructured.let { (t, n) -> t to (n.toIntOrNull() ?: 0) }
+        val (ta, na) = split(sa)
+        val (tb, nb) = split(sb)
+        return if (ta != tb) ta.compareTo(tb) else na.compareTo(nb)
     }
+
+    /** Все версии из ленты выпусков GitHub (releases.atom), включая беты. */
+    fun versionsFromAtom(atom: String): List<String> =
+        Regex("/releases/tag/v?([0-9][0-9A-Za-z.\\-]*)").findAll(atom).map { it.groupValues[1] }.distinct().toList()
 }

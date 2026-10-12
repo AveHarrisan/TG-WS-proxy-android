@@ -18,6 +18,21 @@ class ReleaseNotesTest {
         assertFalse(ReleaseNotes.isNewer("1.1.11-beta1", "1.1.11"))
         assertFalse(ReleaseNotes.isNewer("1.1.10", "1.1.11-beta1"))
         assertTrue(ReleaseNotes.isNewer("1.1.11-beta1", "1.1.10"))
+        // Беты между собой — по номеру, а не строкой.
+        assertTrue(ReleaseNotes.isNewer("1.1.11-beta2", "1.1.11-beta1"))
+        assertTrue(ReleaseNotes.isNewer("1.1.11-beta10", "1.1.11-beta2"))
+        assertFalse(ReleaseNotes.isNewer("1.1.11-beta2", "1.1.11-beta2"))
+        assertTrue(ReleaseNotes.isBeta("v1.1.11-beta2"))
+        assertFalse(ReleaseNotes.isBeta("1.1.10"))
+    }
+
+    @Test
+    fun versionsFromReleasesFeed() {
+        val atom = """<feed><entry><link rel="alternate" type="text/html" href="https://github.com/A/B/releases/tag/v1.1.11-beta1"/></entry>
+            <entry><link rel="alternate" type="text/html" href="https://github.com/A/B/releases/tag/v1.1.10"/></entry></feed>"""
+        val all = ReleaseNotes.versionsFromAtom(atom)
+        assertEquals(listOf("1.1.11-beta1", "1.1.10"), all)
+        assertEquals("1.1.11-beta1", all.maxWithOrNull(ReleaseNotes::compare))
     }
 
     @Test

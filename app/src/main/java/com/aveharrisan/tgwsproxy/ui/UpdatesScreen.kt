@@ -20,27 +20,33 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aveharrisan.tgwsproxy.BuildConfig
 import com.aveharrisan.tgwsproxy.R
 import com.aveharrisan.tgwsproxy.Updater
+import com.aveharrisan.tgwsproxy.core.ReleaseNotes
+import kotlinx.coroutines.launch
 
-/** «Настройки → Обновления»: автопроверка, как часто проверять и когда напомнить после «Позже». */
+/** «Настройки → Обновления»: автопроверка, бета-версии и откат, как часто проверять и когда напомнить после «Позже». */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UpdatesScreen(modifier: Modifier, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val ctx = LocalContext.current
     val p by Updater.prefsFlow.collectAsState()
+    val scope = rememberCoroutineScope()
     fun set(v: Updater.Prefs) = Updater.savePrefs(ctx, v)
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -60,6 +66,32 @@ fun UpdatesScreen(modifier: Modifier, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Switch(p.auto, { set(p.copy(auto = it)) })
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.updset_beta), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.updset_beta_hint), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(p.beta, {
+                        set(p.copy(beta = it))
+                        // Включили — сразу смотрим, есть ли бета; плашка появится сверху.
+                        if (it) scope.launch { Updater.check(ctx.applicationContext, manual = true) }
+                    })
+                }
+                if (ReleaseNotes.isBeta(BuildConfig.VERSION_NAME)) {
+                    Text(stringResource(R.string.updset_on_beta, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = { scope.launch { Updater.rollback(ctx.applicationContext) } }) {
+                        Text(stringResource(R.string.updset_rollback))
+                    }
+                    Text(stringResource(R.string.updset_rollback_hint), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
 

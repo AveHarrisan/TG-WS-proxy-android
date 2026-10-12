@@ -131,7 +131,7 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(22.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.upd_title, release.version), Modifier.weight(1f),
+                Text(stringResource(if (release.rollback) R.string.upd_rollback_title else R.string.upd_title, release.version), Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 IconButton(onClick = {
                     Updater.snooze(ctx, release)
@@ -141,12 +141,15 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
                 }
             }
             Column(Modifier.padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.upd_current, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall)
+                // Откат: список изменений стабильной версии тут только путает — объясняем, что произойдёт.
+                if (release.rollback) Text(stringResource(R.string.upd_rollback_text, BuildConfig.VERSION_NAME, release.version),
+                    style = MaterialTheme.typography.bodyMedium)
+                else Text(stringResource(R.string.upd_current, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall)
 
                 // Что изменилось: три первых пункта, остальное — по кнопке.
-                val shown = release.notes.take(3)
+                val shown = if (release.rollback) emptyList() else release.notes.take(3)
                 shown.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
-                if (release.notes.size > shown.size)
+                if (!release.rollback && release.notes.size > shown.size)
                     Text(stringResource(R.string.upd_more, release.notes.size - shown.size), style = MaterialTheme.typography.bodySmall)
 
                 when (status) {
@@ -168,13 +171,14 @@ private fun UpdateCard(status: UpdateStatus, release: Release) {
                         is UpdateStatus.Installing -> Button(onClick = {}, enabled = false) { Text(stringResource(R.string.upd_installing)) }
                         else -> Button(onClick = { updateOrAsk() }) {
                             Text(if (status is UpdateStatus.Failed) stringResource(R.string.upd_retry)
+                            else if (release.rollback) stringResource(R.string.upd_rollback)
                             else if (release.apkSize > 0) stringResource(R.string.upd_update_size, humanBytesRu(release.apkSize))
                             else stringResource(R.string.upd_update))
                         }
                     }
                     // Сорвалось — сразу даём собрать логи: по одной строке ошибки причину не найти.
                     if (status is UpdateStatus.Failed) TextButton(onClick = { reportOpen = true }) { Text(stringResource(R.string.rep_btn)) }
-                    else TextButton(onClick = { notesOpen = true }) { Text(stringResource(R.string.upd_whats_new)) }
+                    else if (!release.rollback) TextButton(onClick = { notesOpen = true }) { Text(stringResource(R.string.upd_whats_new)) }
                 }
             }
         }

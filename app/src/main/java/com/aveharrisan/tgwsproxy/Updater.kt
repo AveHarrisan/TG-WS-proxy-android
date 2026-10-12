@@ -31,6 +31,8 @@ data class Release(
     val apkUrl: String,
     val apkSize: Long,
     val pageUrl: String,
+    /** Откат с беты на стабильную: та же стабильная версия, пересобранная с бо́льшим номером сборки. */
+    val rollback: Boolean = false,
 )
 
 sealed interface UpdateStatus {
@@ -58,11 +60,19 @@ object Updater {
     internal var webLatest = "https://github.com/$REPO/releases/latest"
     internal var webBase = "https://github.com/$REPO"
     internal var rawBase = "https://raw.githubusercontent.com/$REPO"
+    /** Лента всех выпусков вместе с бетами — тоже без лимита API. */
+    internal var webFeed = "https://github.com/$REPO/releases.atom"
+    internal var apiList = "https://api.github.com/repos/$REPO/releases?per_page=20"
     private const val AUTO_CHECK_EVERY_MS = 5 * 60 * 1000L
     /** Служба заглядывает раз в 15 минут; сам запрос к GitHub — не чаще, чем задано в настройках. */
     const val BACKGROUND_TICK_SEC = 15 * 60L
     /** Имя APK в каждом выпуске — на него же ведёт кнопка «Скачать» в README. */
     const val APK_NAME = "TG-WS-Proxy.apk"
+    /** Файл отката в выпуске каждой беты: последняя стабильная версия с номером сборки выше беты. */
+    const val ROLLBACK_APK_NAME = "TG-WS-Proxy-rollback.apk"
+
+    /** У бет своё имя файла, чтобы не спутать со стабильной: TG-WS-Proxy-1.1.11-beta2.apk. */
+    fun apkName(version: String) = if (ReleaseNotes.isBeta(version)) "TG-WS-Proxy-$version.apk" else APK_NAME
     const val ACTION_INSTALL_RESULT = "com.aveharrisan.tgwsproxy.INSTALL_RESULT"
 
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
@@ -79,6 +89,8 @@ object Updater {
         val auto: Boolean = true,
         val checkEveryHours: Int = 1,
         val remindAfterHours: Int = 24,
+        /** Предлагать и беты. Кто поставил бету, тот по умолчанию в бета-канале. */
+        val beta: Boolean = false,
     )
 
     private val _prefs = MutableStateFlow(Prefs())
@@ -90,6 +102,7 @@ object Updater {
             auto = p.getBoolean("auto", true),
             checkEveryHours = p.getInt("checkEveryHours", 1),
             remindAfterHours = p.getInt("remindAfterHours", 24),
+            beta = p.getBoolean("beta", ReleaseNotes.isBeta(BuildConfig.VERSION_NAME)),
         )
         val v = p.getString("snoozedVersion", null)
         val until = p.getLong("snoozedUntil", 0)
@@ -98,7 +111,7 @@ object Updater {
 
     fun savePrefs(ctx: Context, value: Prefs) {
         prefs(ctx).edit().putBoolean("auto", value.auto).putInt("checkEveryHours", value.checkEveryHours)
-            .putInt("remindAfterHours", value.remindAfterHours).apply()
+            .putInt("remindAfterHours", value.remindAfterHours).putBoolean("beta", value.beta).apply()
         _prefs.value = value
     }
 
@@ -196,6 +209,40 @@ object Updater {
             // Молча, если проверка шла сама: плашка с ошибкой при каждом запуске только раздражает.
             if (manual) UpdateStatus.Failed(explain(e), null) else UpdateStatus.Idle
         }
+    }
+
+    /**
+     * Вернуться с беты на стабильную. Android не ставит сборку с меньшим номером поверх большей
+     * (а удалять приложение — терять настройки), поэтому у каждой беты в выпуске лежит файл отката:
+     * последняя стабильная версия, пересобранная с номером сборки выше беты. Вышла стабильная новее
+     * беты — это обычное обновление. Бета-канал при этом выключаем, иначе следующая бета придёт снова.
+     */
+    suspend fun rollback(ctx: Context) {
+        val s = _status.value
+        if (s is UpdateStatus.Checking || s is UpdateStatus.Downloading || s is UpdateStatus.Installing) return
+        savePrefs(ctx, _prefs.value.copy(beta = false))
+        clearSnooze(ctx)
+        _status.value = UpdateStatus.Checking
+        _status.value = try {
+            val stable = parse(withContext(Dispatchers.IO) { fetchStable() })
+            if (isNewer(stable.version, BuildConfig.VERSION_NAME)) UpdateStatus.Available(stable)
+            else if (!ReleaseNotes.isBeta(BuildConfig.VERSION_NAME)) UpdateStatus.UpToDate
+            else {
+                val url = "$webBase/releases/download/v${BuildConfig.VERSION_NAME}/$ROLLBACK_APK_NAME"
+                val size = withContext(Dispatchers.IO) { headSize(url) }
+                    ?: throw IOException("у этой беты нет файла отката. Удалите приложение и поставьте ${stable.version} со страницы выпусков")
+                UpdateStatus.Available(stable.copy(apkUrl = url, apkSize = size, rollback = true))
+            }
+        } catch (e: Exception) {
+            Log.w("Откат на стабильную: ${e.message ?: e.javaClass.simpleName}")
+            UpdateStatus.Failed(explain(e), null)
+        }
+    }
+
+    /** Размер файла по HEAD; null — файла нет. */
+    private fun headSize(url: String): Long? {
+        val h = open(url)
+        return try { h.requestMethod = "HEAD"; if (h.responseCode == 200) h.contentLengthLong.coerceAtLeast(0) else null } finally { h.disconnect() }
     }
 
     suspend fun download(ctx: Context, release: Release) {
@@ -322,7 +369,9 @@ object Updater {
      * Сначала — без API: у api.github.com лимит 60 запросов в час на адрес, а у мобильных операторов
      * за одним адресом тысячи абонентов. Не вышло — тогда API, как раньше.
      */
-    private fun fetchLatest(): JSONObject {
+    private fun fetchLatest(): JSONObject = if (_prefs.value.beta) fetchNewestWithBeta() else fetchStable()
+
+    private fun fetchStable(): JSONObject {
         if (webLatest.isNotEmpty()) {
             try {
                 return fetchLatestWeb()
@@ -333,7 +382,7 @@ object Updater {
         return fetchLatestApi()
     }
 
-    /** Версия — из переадресации «последний выпуск», изменения — из CHANGELOG.md этой версии, размер — из заголовков APK. */
+    /** Последний стабильный выпуск: версия — из переадресации «последний выпуск» (беты GitHub туда не ставит). */
     private fun fetchLatestWeb(): JSONObject {
         val c = open(webLatest)
         c.instanceFollowRedirects = false
@@ -347,6 +396,45 @@ object Updater {
             c.disconnect()
         }
         val version = ReleaseNotes.versionFromTagUrl(location) ?: throw IOException("выпусков на GitHub пока нет")
+        return releaseJson(version)
+    }
+
+    /**
+     * Бета-канал: самая новая из всех выпусков, бета это или стабильная. Список — из ленты releases.atom
+     * (пред-выпуски GitHub в /releases/latest не отдаёт), не вышло — из API.
+     */
+    private fun fetchNewestWithBeta(): JSONObject {
+        if (webFeed.isNotEmpty()) {
+            try {
+                val c = open(webFeed)
+                val atom = try {
+                    if (c.responseCode != 200) throw IOException("GitHub ответил ${c.responseCode}")
+                    c.inputStream.bufferedReader().use { it.readText() }
+                } finally { c.disconnect() }
+                val newest = ReleaseNotes.versionsFromAtom(atom).maxWithOrNull(ReleaseNotes::compare)
+                    ?: throw IOException("выпусков на GitHub пока нет")
+                return releaseJson(newest)
+            } catch (e: Exception) {
+                Log.d("Лента выпусков не открылась (${e.message}), пробую API")
+            }
+        }
+        val c = open(apiList)
+        c.setRequestProperty("Accept", "application/vnd.github+json")
+        val list = try {
+            when (val code = c.responseCode) {
+                200 -> org.json.JSONArray(c.inputStream.bufferedReader().use { it.readText() })
+                403, 429 -> throw IOException("GitHub временно ограничил проверки, попробуйте через час")
+                else -> throw IOException("GitHub ответил $code")
+            }
+        } finally { c.disconnect() }
+        return (0 until list.length()).map { list.getJSONObject(it) }
+            .filter { !it.optBoolean("draft") }
+            .maxWithOrNull { a, b -> ReleaseNotes.compare(a.optString("tag_name"), b.optString("tag_name")) }
+            ?: throw IOException("выпусков на GitHub пока нет")
+    }
+
+    /** Выпуск по версии без API: изменения — из CHANGELOG.md этой версии, размер — из заголовков APK. */
+    private fun releaseJson(version: String): JSONObject {
         val tag = "v$version"
         val body = runCatching {
             val cl = open("$rawBase/$tag/CHANGELOG.md")
@@ -354,17 +442,15 @@ object Updater {
                 if (cl.responseCode == 200) ReleaseNotes.changelogSection(cl.inputStream.bufferedReader().use { it.readText() }, version) else ""
             } finally { cl.disconnect() }
         }.getOrDefault("")
-        val apkUrl = "$webBase/releases/download/$tag/$APK_NAME"
-        val size = runCatching {
-            val h = open(apkUrl)
-            try { h.requestMethod = "HEAD"; if (h.responseCode == 200) h.contentLengthLong else 0L } finally { h.disconnect() }
-        }.getOrDefault(0L)
+        val apkName = apkName(version)
+        val apkUrl = "$webBase/releases/download/$tag/$apkName"
+        val size = runCatching { headSize(apkUrl) ?: 0L }.getOrDefault(0L)
         // Тот же вид, что у ответа API: дальше разбор и кэш не отличают, откуда пришло.
         return JSONObject()
             .put("tag_name", tag)
             .put("body", body)
             .put("html_url", "$webBase/releases/tag/$tag")
-            .put("assets", org.json.JSONArray().put(JSONObject().put("name", APK_NAME).put("browser_download_url", apkUrl).put("size", size)))
+            .put("assets", org.json.JSONArray().put(JSONObject().put("name", apkName).put("browser_download_url", apkUrl).put("size", size)))
     }
 
     private fun fetchLatestApi(): JSONObject {
@@ -388,7 +474,7 @@ object Updater {
         var apkSize = 0L
         if (assets != null) for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
-            if (a.optString("name").endsWith(".apk", ignoreCase = true)) {
+            if (a.optString("name").endsWith(".apk", ignoreCase = true) && a.optString("name") != ROLLBACK_APK_NAME) {
                 apkUrl = a.optString("browser_download_url")
                 apkSize = a.optLong("size")
                 break
@@ -435,6 +521,11 @@ object Updater {
         val info = ctx.packageManager.getPackageArchiveInfo(part.path, 0)
             ?: throw IOException("скачанный файл повреждён")
         if (info.packageName != ctx.packageName) throw IOException("в выпуске чужой APK")
+        val mineCode = runCatching { androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(ctx.packageManager.getPackageInfo(ctx.packageName, 0)) }.getOrNull()
+        val theirCode = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)
+        if (mineCode != null && theirCode in 1 until mineCode) throw IOException(
+            "Android не ставит более старую сборку поверх новой (${theirCode} < ${mineCode}). Удалите приложение и поставьте эту версию со страницы выпуска"
+        )
         if (!sameSigner(ctx, part)) throw IOException(
             "эта версия подписана другим ключом и не встанет поверх. Удалите приложение и поставьте новую версию со страницы выпуска"
         )

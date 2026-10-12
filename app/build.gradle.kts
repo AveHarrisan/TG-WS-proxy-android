@@ -20,8 +20,10 @@ android {
         applicationId = "com.aveharrisan.tgwsproxy"
         minSdk = 24
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.1.11-beta1"
+        // Номер сборки 15 занят файлом отката беты 2 (1.1.10, пересобранная), поэтому следующий выпуск — 16.
+        // У каждой беты файл отката берёт её номер + 1: следующий выпуск после беты — минимум номер беты + 2.
+        versionCode = 14
+        versionName = "1.1.11-beta2"
     }
 
     signingConfigs {

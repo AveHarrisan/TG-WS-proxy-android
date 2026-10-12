@@ -217,6 +217,14 @@
     <string name="updset_r1d">через сутки</string>
     <string name="updset_r3d">через 3 дня</string>
     <string name="updset_r1w">через неделю</string>
+    <string name="upd_rollback_title">Возврат на %1$s</string>
+    <string name="upd_rollback_text">Бета %1$s заменится стабильной версией %2$s. Настройки сохранятся.</string>
+    <string name="upd_rollback">Вернуться</string>
+    <string name="updset_beta">Получать бета-версии</string>
+    <string name="updset_beta_hint">Новое приходит раньше, но может работать хуже. Вернуться на стабильную можно в любой момент здесь же</string>
+    <string name="updset_on_beta">Сейчас стоит бета %1$s</string>
+    <string name="updset_rollback">Вернуться на стабильную</string>
+    <string name="updset_rollback_hint">Поставит последнюю стабильную версию поверх беты и выключит бета-версии</string>
     <string name="updset_footer">Кнопка «Проверить» в «О программе» работает всегда и снимает отложенное напоминание.</string>
 
     <string name="worker_title">Свой Cloudflare Worker</string>
