@@ -2,6 +2,7 @@ package com.aveharrisan.tgwsproxy
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.aveharrisan.tgwsproxy.core.Net
 import com.aveharrisan.tgwsproxy.core.WsPool
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,8 +15,10 @@ data class ExperimentalFlags(
     val quietNotification: Boolean = false,
     /** Wi-Fi без режима «низкая задержка», даже когда включено «Не давать телефону засыпать». */
     val wifiPowerSave: Boolean = false,
+    /** TCP keepalive через минуту простоя, чтобы сеть не обрывала соединения, по которым долго ничего не шло. */
+    val tcpKeepalive: Boolean = false,
 ) {
-    val any: Boolean get() = poolSleep || quietNotification || wifiPowerSave
+    val any: Boolean get() = poolSleep || quietNotification || wifiPowerSave || tcpKeepalive
 }
 
 object Experimental {
@@ -32,6 +35,7 @@ object Experimental {
             poolSleep = prefs.getBoolean("poolSleep", false),
             quietNotification = prefs.getBoolean("quietNotification", false),
             wifiPowerSave = prefs.getBoolean("wifiPowerSave", false),
+            tcpKeepalive = prefs.getBoolean("tcpKeepalive", false),
         )
         applyToCore()
     }
@@ -41,6 +45,7 @@ object Experimental {
             .putBoolean("poolSleep", f.poolSleep)
             .putBoolean("quietNotification", f.quietNotification)
             .putBoolean("wifiPowerSave", f.wifiPowerSave)
+            .putBoolean("tcpKeepalive", f.tcpKeepalive)
             .apply()
         _flow.value = f
         applyToCore()
@@ -48,5 +53,6 @@ object Experimental {
 
     private fun applyToCore() {
         WsPool.idleSleepSec = if (current.poolSleep) POOL_SLEEP_SEC else 0.0
+        Net.keepIdleSec = if (current.tcpKeepalive) Net.KEEP_IDLE_SEC else 0
     }
 }

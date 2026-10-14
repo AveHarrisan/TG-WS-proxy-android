@@ -22,6 +22,38 @@ object Net {
     }
 
     /**
+     * Через сколько секунд простоя слать TCP keepalive; 0 — системное значение (около 2 часов, как в оригинале).
+     * Дальше, пока тишина, пакет уходит раз в [KEEP_INTERVAL_SEC]; три без ответа — система закрывает соединение.
+     * Часть сетей обрывает соединение, по которому ~90 с ничего не шло. Keepalive — пустые служебные пакеты TCP:
+     * на них отвечает ядро системы сервера, Telegram и прокси их не видят, поэтому поток MTProto не меняется.
+     */
+    @Volatile var keepIdleSec: Int = 0
+    const val KEEP_IDLE_SEC = 60
+    const val KEEP_INTERVAL_SEC = 30
+    const val KEEP_COUNT = 3
+
+    /** Как выставить интервалы keepalive на этой платформе. На Android подменяется в приложении. */
+    @Volatile var keepAliveTuner: (Socket, Int, Int, Int) -> Unit = ::jvmKeepAlive
+
+    /** Вызывать после connect: на Android до него у сокета ещё нет дескриптора. */
+    fun keepAlive(s: Socket) {
+        val idle = keepIdleSec
+        if (idle <= 0) return
+        runCatching { keepAliveTuner(s, idle, KEEP_INTERVAL_SEC, KEEP_COUNT) }
+            .onFailure { Log.d("TCP keepalive не выставлен: ${it.javaClass.simpleName}: ${it.message}") }
+    }
+
+    /** jdk.net.ExtendedSocketOptions есть в JDK на Linux/macOS, на Android его нет — поэтому через отражение. */
+    @Suppress("UNCHECKED_CAST")
+    private fun jvmKeepAlive(s: Socket, idle: Int, interval: Int, count: Int) {
+        val c = Class.forName("jdk.net.ExtendedSocketOptions")
+        fun opt(name: String) = c.getField(name).get(null) as java.net.SocketOption<Int>
+        s.setOption(opt("TCP_KEEPIDLE"), idle)
+        s.setOption(opt("TCP_KEEPINTERVAL"), interval)
+        s.setOption(opt("TCP_KEEPCOUNT"), count)
+    }
+
+    /**
      * TCP (+TLS) соединение на конкретный адрес с заданным SNI.
      * [verifyHostname]=false — для доменного фронтинга: цепочка сертификатов проверяется,
      * а совпадение имени нет (как check_hostname=False в исходном проекте).
@@ -31,6 +63,7 @@ object Net {
         try {
             tune(raw)
             raw.connect(InetSocketAddress(host, port), timeoutMs)
+            keepAlive(raw)
             if (!tls) return raw
             val serverName = sni ?: host
             val ssl = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, serverName, port, true) as SSLSocket

@@ -86,6 +86,7 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
          * От сервера ничего столько времени — соединение считаем мёртвым и закрываем, Telegram откроет новое.
          * Пинг WebSocket не шлём: сервер Telegram на него закрывает соединение (проверено 29.09.2026).
          * Живое соединение Telegram сам держит своими пингами MTProto, так что 2 минуты тишины — это обрыв.
+         * Чтобы сеть не рвала простаивающие соединения, есть эксперимент с TCP keepalive ([Net.keepIdleSec]).
          */
         const val IDLE_TIMEOUT_MS = 120_000
     }
@@ -193,7 +194,7 @@ class Bridge(private val cfg: () -> ProxyConfig, private val cfWorkerPool: CfWor
         }
         val remote = try {
             Log.d("[$label] TCP fallback to $key")
-            Socket().also { Net.tune(it); it.connect(InetSocketAddress(dst, port), 10_000) }
+            Socket().also { Net.tune(it); it.connect(InetSocketAddress(dst, port), 10_000); Net.keepAlive(it) }
         } catch (e: Exception) {
             val failures = (tcpFailures[key] ?: 0) + 1
             tcpFailures[key] = failures

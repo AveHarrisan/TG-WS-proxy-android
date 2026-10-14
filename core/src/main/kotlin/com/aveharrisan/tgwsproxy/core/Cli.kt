@@ -23,6 +23,7 @@ fun main(args: Array<String>) {
             "--no-cfproxy" -> cfg = cfg.copy(fallbackCfProxy = false)
             "--no-h2" -> cfg = cfg.copy(cfProxyH2Media = false)
             "--pool-max-age" -> cfg = cfg.copy(poolMaxAgeSec = next().toInt().coerceAtLeast(WsPool.MIN_MAX_AGE_SEC))
+            "--tcp-keepalive" -> Net.keepIdleSec = next().toInt().coerceAtLeast(0)
             "--no-secure" -> cfg = cfg.copy(disableSecure = true)
             "--fake-tls-domain" -> cfg = cfg.copy(fakeTlsDomain = next().trim())
             "--force-test-dc" -> cfg = cfg.copy(forceTestDc = true)

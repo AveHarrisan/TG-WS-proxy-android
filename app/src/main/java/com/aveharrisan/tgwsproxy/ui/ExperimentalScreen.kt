@@ -58,6 +58,7 @@ fun ExperimentalScreen(modifier: Modifier, onBack: () -> Unit) {
         ExpSwitch(R.string.exp_pool, R.string.exp_pool_hint, f.poolSleep) { Experimental.set(f.copy(poolSleep = it)) }
         ExpSwitch(R.string.exp_notif, R.string.exp_notif_hint, f.quietNotification) { Experimental.set(f.copy(quietNotification = it)) }
         ExpSwitch(R.string.exp_wifi, R.string.exp_wifi_hint, f.wifiPowerSave) { Experimental.set(f.copy(wifiPowerSave = it)) }
+        ExpSwitch(R.string.exp_keepalive, R.string.exp_keepalive_hint, f.tcpKeepalive) { Experimental.set(f.copy(tcpKeepalive = it)) }
 
         Text(stringResource(R.string.exp_footer), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
