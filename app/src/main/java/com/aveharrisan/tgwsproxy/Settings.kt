@@ -6,6 +6,7 @@ import com.aveharrisan.tgwsproxy.core.DcIpParser
 import com.aveharrisan.tgwsproxy.core.Domains
 import com.aveharrisan.tgwsproxy.core.ProxyConfig
 import com.aveharrisan.tgwsproxy.core.Rnd
+import com.aveharrisan.tgwsproxy.core.WsPool
 import com.aveharrisan.tgwsproxy.core.toHex
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,8 @@ data class AppSettings(
     /** Медиа через CF-прокси одним соединением HTTP/2. */
     val cfH2: Boolean = true,
     val poolSize: Int = 4,
+    /** Через сколько секунд заменять готовые подключения пула свежими. */
+    val poolMaxAge: Int = WsPool.DEFAULT_MAX_AGE_SEC,
     val noSecure: Boolean = false,
     val allowLan: Boolean = false,
     val fakeTlsDomain: String = "",
@@ -36,6 +39,7 @@ data class AppSettings(
         secret = secret,
         dcRedirects = DcIpParser.parse(dcIps.lines()),
         poolSize = poolSize,
+        poolMaxAgeSec = poolMaxAge,
         fallbackCfProxy = cfProxy,
         cfProxyUserDomains = Domains.coerceList(cfDomains),
         cfProxyWorkerDomains = Domains.coerceList(cfWorkerDomains),
@@ -73,6 +77,7 @@ object Settings {
             cfDomains = prefs.getString("cfDomains", d.cfDomains)!!,
             cfWorkerDomains = prefs.getString("cfWorkerDomains", d.cfWorkerDomains)!!,
             poolSize = prefs.getInt("poolSize", d.poolSize),
+            poolMaxAge = prefs.getInt("poolMaxAge", d.poolMaxAge),
             noSecure = prefs.getBoolean("noSecure", d.noSecure),
             allowLan = prefs.getBoolean("allowLan", d.allowLan),
             fakeTlsDomain = prefs.getString("fakeTlsDomain", d.fakeTlsDomain)!!,
@@ -93,6 +98,7 @@ object Settings {
             .putString("cfDomains", s.cfDomains)
             .putString("cfWorkerDomains", s.cfWorkerDomains)
             .putInt("poolSize", s.poolSize)
+            .putInt("poolMaxAge", s.poolMaxAge)
             .putBoolean("noSecure", s.noSecure)
             .putBoolean("allowLan", s.allowLan)
             .putString("fakeTlsDomain", s.fakeTlsDomain)

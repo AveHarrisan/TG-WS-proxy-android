@@ -10,6 +10,8 @@ data class ProxyConfig(
     val dcRedirects: Map<Int, String> = DEFAULT_DC_REDIRECTS,
     val bufferSize: Int = 256 * 1024,
     val poolSize: Int = 4,
+    /** Через сколько секунд заменять готовое WS-соединение свежим (см. WsPool.DEFAULT_MAX_AGE_SEC). */
+    val poolMaxAgeSec: Int = WsPool.DEFAULT_MAX_AGE_SEC,
     val fallbackCfProxy: Boolean = true,
     val cfProxyUserDomains: List<String> = emptyList(),
     val cfProxyWorkerDomains: List<String> = emptyList(),

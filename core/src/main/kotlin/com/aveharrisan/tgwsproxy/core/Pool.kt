@@ -47,7 +47,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         while (true) {
             val e = synchronized(b) { b.pollFirst() } ?: break
             val age = now() - e.created
-            if (age > MAX_AGE || !e.ws.isAlive) { quietClose(e.ws); continue }
+            if (age > maxAge() || !e.ws.isAlive) { quietClose(e.ws); continue }
             Stats.poolHits.incrementAndGet()
             Log.d("WS pool hit $key (age=${"%.1f".format(age)}s, left=${synchronized(b) { b.size }})")
             scheduleRefill(key, targetIp, domains)
@@ -139,7 +139,7 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
             val it = b.iterator()
             while (it.hasNext()) {
                 val e = it.next()
-                if (t - e.created >= MAX_AGE || !e.ws.isAlive) { expired += e.ws; it.remove() }
+                if (t - e.created >= maxAge() || !e.ws.isAlive) { expired += e.ws; it.remove() }
             }
             b.size
         }
@@ -226,17 +226,22 @@ class WsPool(private val cfg: () -> ProxyConfig, private val io: ExecutorService
         directFailed = false
     }
 
+    private fun maxAge(): Double = cfg().poolMaxAgeSec.coerceAtLeast(MIN_MAX_AGE_SEC).toDouble()
+
     private fun quietClose(ws: RawWebSocket) {
         try { io.execute { runCatching { ws.close() } } } catch (e: RejectedExecutionException) { runCatching { ws.close() } }
     }
 
     companion object {
         /**
-         * Сколько держать готовое соединение. В оригинале 120 с, но на части сетей простаивающий WS
-         * обрывают через ~90 с, и мы этого не замечаем, пока не отдадим его Telegram: по отчёту 14.10
+         * Сколько держать готовое соединение, по умолчанию. В оригинале 120 с, но на части сетей простаивающий
+         * WS обрывают через ~90 с, и мы этого не замечаем, пока не отдадим его Telegram: по отчёту 14.10
          * старше 90 с умирало 60% выданных соединений (моложе — 6%). 75 с — с запасом до обрыва.
+         * Меняется в настройках: чем реже, тем меньше подключений в час, но тем больше мёртвых на таких сетях.
          */
-        const val MAX_AGE = 75.0
+        const val DEFAULT_MAX_AGE_SEC = 75
+        /** Ниже нельзя: проверка пула идёт раз в 5 с, а соединение открывается до нескольких секунд. */
+        const val MIN_MAX_AGE_SEC = 30
         const val CHECK_INTERVAL_MS = 5000L
 
         /** Через сколько секунд без новых соединений пул засыпает; 0 — никогда (как в оригинале). */

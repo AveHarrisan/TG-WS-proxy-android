@@ -45,6 +45,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -152,6 +155,8 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
             label = { Text(stringResource(R.string.label_pool)) }, singleLine = true, isError = poolErr,
             supportingText = { Text(stringResource(if (poolErr) R.string.err_pool else R.string.hint_pool)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        PoolAgeChoice(s.poolMaxAge, poolSize = poolText.toIntOrNull() ?: 0,
+            dcCount = runCatching { DcIpParser.parse(s.dcIps.lines()).size }.getOrDefault(0)) { s = s.copy(poolMaxAge = it) }
         SwitchRow(stringResource(R.string.label_lan), stringResource(R.string.hint_lan), s.allowLan) { s = s.copy(allowLan = it) }
         OutlinedTextField(s.fakeTlsDomain, { s = s.copy(fakeTlsDomain = it.trim()) }, Modifier.fillMaxWidth(), singleLine = true,
             label = { Text(stringResource(R.string.label_faketls)) }, isError = tlsErr,
@@ -201,6 +206,39 @@ private fun SettingsForm(modifier: Modifier, onOpenExperimental: () -> Unit, onO
             }, Modifier.weight(1f)) { Text(stringResource(R.string.btn_save)) }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** Варианты замены готовых подключений: секунды → название и что будет. */
+private val poolAgeOptions = listOf(
+    45 to (R.string.pool_age_45 to R.string.pool_age_45_hint),
+    75 to (R.string.pool_age_75 to R.string.pool_age_75_hint),
+    120 to (R.string.pool_age_120 to R.string.pool_age_120_hint),
+    300 to (R.string.pool_age_300 to R.string.pool_age_300_hint),
+)
+
+/**
+ * Как часто заменять готовые подключения пула. Короче — меньше мёртвых подключений на сетях, которые рвут
+ * простой, но больше подключений в час (батарея, трафик); длиннее — наоборот. Под выбором — оценка в час.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PoolAgeChoice(selected: Int, poolSize: Int, dcCount: Int, onSelect: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(stringResource(R.string.label_pool_age), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.hint_pool_age), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            poolAgeOptions.forEach { (sec, labels) ->
+                FilterChip(selected = sec == selected, onClick = { onSelect(sec) }, enabled = poolSize > 0,
+                    label = { Text(stringResource(labels.first)) })
+            }
+        }
+        val hint = poolAgeOptions.firstOrNull { it.first == selected }?.second?.second
+        if (hint != null) Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
+        // Пул держит по poolSize подключений на каждый датацентр из списка — обычных и для медиа.
+        val perHour = if (selected > 0) dcCount * 2 * poolSize * 3600 / selected else 0
+        Text(if (poolSize > 0) stringResource(R.string.pool_age_per_hour, perHour) else stringResource(R.string.pool_age_off),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
