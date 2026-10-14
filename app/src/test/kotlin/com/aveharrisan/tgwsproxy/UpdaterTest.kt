@@ -62,10 +62,11 @@ class UpdaterTest {
         Updater.rawBase = "$base/raw"
         Updater.webFeed = ""
         Updater.apiList = "$base/list"
+        Updater.installedVersion = BuildConfig.VERSION_NAME
         Updater.setStatus(UpdateStatus.Idle)
         // Настройки в SharedPreferences у каждого теста свои — подтягиваем их и сбрасываем «отложено».
         Updater.loadPrefs(ctx)
-        // Сама сборка — бета, и по умолчанию была бы в бета-канале; старые тесты — про стабильный.
+        // Если сборка — бета, она по умолчанию была бы в бета-канале; старые тесты — про стабильный.
         Updater.savePrefs(ctx, Updater.Prefs())
     }
 
@@ -309,28 +310,38 @@ class UpdaterTest {
 
     @Test
     fun rollbackOffersRebuiltStableAndLeavesBeta() = runBlocking {
-        assertTrue("тест рассчитан на бета-сборку", ReleaseNotes.isBeta(BuildConfig.VERSION_NAME))
+        Updater.installedVersion = "1.0.1-beta2"
         Updater.savePrefs(ctx, Updater.Prefs(beta = true))
         Updater.webLatest = "$base/web/latest"
         routes["/web/latest"] = { MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v1.0.0") }
-        routes["/web/releases/download/v${BuildConfig.VERSION_NAME}/TG-WS-Proxy-rollback.apk"] =
+        routes["/web/releases/download/v1.0.1-beta2/TG-WS-Proxy-rollback.apk"] =
             { MockResponse().setHeader("Content-Length", "4321") }
         Updater.rollback(ctx)
         val r = (Updater.status.value as UpdateStatus.Available).release
         assertTrue(r.rollback)
         assertEquals("1.0.0", r.version)
-        assertEquals("$base/web/releases/download/v${BuildConfig.VERSION_NAME}/TG-WS-Proxy-rollback.apk", r.apkUrl)
+        assertEquals("$base/web/releases/download/v1.0.1-beta2/TG-WS-Proxy-rollback.apk", r.apkUrl)
         assertEquals(4321L, r.apkSize)
         assertFalse("после отката беты больше не предлагаем", Updater.prefsFlow.value.beta)
     }
 
     @Test
     fun rollbackWithoutFileExplains() = runBlocking {
+        Updater.installedVersion = "1.0.1-beta2"
         Updater.webLatest = "$base/web/latest"
         routes["/web/latest"] = { MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v1.0.0") }
         Updater.rollback(ctx)
         val s = Updater.status.value
         assertTrue("$s", s is UpdateStatus.Failed && s.message.contains("файла отката"))
+    }
+
+    @Test
+    fun rollbackOnStableIsUpToDate() = runBlocking {
+        Updater.installedVersion = "1.0.0"
+        Updater.webLatest = "$base/web/latest"
+        routes["/web/latest"] = { MockResponse().setResponseCode(302).addHeader("Location", "$base/web/releases/tag/v1.0.0") }
+        Updater.rollback(ctx)
+        assertEquals(UpdateStatus.UpToDate, Updater.status.value)
     }
 
     @Test

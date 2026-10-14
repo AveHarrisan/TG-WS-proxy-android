@@ -62,6 +62,8 @@ object Updater {
     internal var rawBase = "https://raw.githubusercontent.com/$REPO"
     /** Лента всех выпусков вместе с бетами — тоже без лимита API. */
     internal var webFeed = "https://github.com/$REPO/releases.atom"
+    /** Установленная версия; в тестах подменяется, чтобы проверять откат и на бете, и на стабильной. */
+    internal var installedVersion = BuildConfig.VERSION_NAME
     internal var apiList = "https://api.github.com/repos/$REPO/releases?per_page=20"
     private const val AUTO_CHECK_EVERY_MS = 5 * 60 * 1000L
     /** Служба заглядывает раз в 15 минут; сам запрос к GitHub — не чаще, чем задано в настройках. */
@@ -225,10 +227,10 @@ object Updater {
         _status.value = UpdateStatus.Checking
         _status.value = try {
             val stable = parse(withContext(Dispatchers.IO) { fetchStable() })
-            if (isNewer(stable.version, BuildConfig.VERSION_NAME)) UpdateStatus.Available(stable)
-            else if (!ReleaseNotes.isBeta(BuildConfig.VERSION_NAME)) UpdateStatus.UpToDate
+            if (isNewer(stable.version, installedVersion)) UpdateStatus.Available(stable)
+            else if (!ReleaseNotes.isBeta(installedVersion)) UpdateStatus.UpToDate
             else {
-                val url = "$webBase/releases/download/v${BuildConfig.VERSION_NAME}/$ROLLBACK_APK_NAME"
+                val url = "$webBase/releases/download/v${installedVersion}/$ROLLBACK_APK_NAME"
                 val size = withContext(Dispatchers.IO) { headSize(url) }
                     ?: throw IOException("у этой беты нет файла отката. Удалите приложение и поставьте ${stable.version} со страницы выпусков")
                 UpdateStatus.Available(stable.copy(apkUrl = url, apkSize = size, rollback = true))
