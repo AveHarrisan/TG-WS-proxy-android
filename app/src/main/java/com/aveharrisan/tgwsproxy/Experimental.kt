@@ -7,7 +7,7 @@ import com.aveharrisan.tgwsproxy.core.WsPool
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Экспериментальный режим: экономия заряда. Всё выключено по умолчанию и применяется сразу. */
+/** Экспериментальный режим: экономия заряда и надёжность связи. Всё выключено по умолчанию и применяется сразу. */
 data class ExperimentalFlags(
     /** Пул заранее открытых соединений засыпает, если Telegram 5 минут не открывал новых. */
     val poolSleep: Boolean = false,

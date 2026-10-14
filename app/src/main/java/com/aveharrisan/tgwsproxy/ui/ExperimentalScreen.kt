@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.aveharrisan.tgwsproxy.Experimental
 import com.aveharrisan.tgwsproxy.R
 
-/** Отдельный экран из «Настроек»: экономия заряда. Переключатели применяются сразу, без «Сохранить». */
+/** Отдельный экран из «Настроек»: экономия заряда и надёжность связи. Переключатели применяются сразу, без «Сохранить». */
 @Composable
 fun ExperimentalScreen(modifier: Modifier, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
