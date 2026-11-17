@@ -24,7 +24,7 @@ data class AppSettings(
     val poolSize: Int = 4,
     /** Через сколько секунд заменять готовые подключения пула свежими. */
     val poolMaxAge: Int = WsPool.DEFAULT_MAX_AGE_SEC,
-    val noSecure: Boolean = false,
+    val noSecure: Boolean = true,
     val allowLan: Boolean = false,
     val fakeTlsDomain: String = "",
     val verbose: Boolean = false,
@@ -62,6 +62,12 @@ object Settings {
 
     fun init(ctx: Context) {
         prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        // Однократно включаем рабочий режим CF и для обновлений со старых версий.
+        // После этого ручной выбор пользователя сохраняется между запусками.
+        if (!prefs.getBoolean("plainCfDefaultApplied", false)) {
+            prefs.edit().putBoolean("noSecure", true)
+                .putBoolean("plainCfDefaultApplied", true).apply()
+        }
         val d = AppSettings()
         var secret = prefs.getString("secret", null)
         if (secret.isNullOrBlank()) {

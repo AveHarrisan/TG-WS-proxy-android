@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
 
 /** Служба переднего плана: держит прокси, пока пользователь его не выключит. */
 class ProxyService : Service() {
-    private var server: ProxyServer? = null
+    @Volatile private var server: ProxyServer? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     // Второй поток — для проверки обновлений: сетевой запрос не должен задерживать уведомление.
@@ -49,7 +49,7 @@ class ProxyService : Service() {
             stopProxy()
         }
         goForeground(getString(R.string.notif_starting))
-        if (server == null) startProxy()
+        if (intent?.action == ACTION_RESTART || server == null) startProxy()
         return START_STICKY
     }
 
@@ -58,7 +58,8 @@ class ProxyService : Service() {
         ProxyState.error.value = null
         val s = Settings.current
         Log.minLevel = if (s.verbose) Level.DEBUG else Level.INFO
-        Thread({
+        lifecycle.execute {
+            if (server != null) return@execute
             try {
                 val cfg = s.toConfig()
                 val srv = ProxyServer(cfg)
@@ -92,7 +93,7 @@ class ProxyService : Service() {
                 stopSelf()
             }
             ProxyTileService.refresh(this)
-        }, "proxy-start").start()
+        }
     }
 
     private var netCallback: ConnectivityManager.NetworkCallback? = null
@@ -142,13 +143,18 @@ class ProxyService : Service() {
     }
 
     private fun stopProxy() {
-        unwatchNetwork()
-        tick?.cancel(false)
-        server?.stop()
-        server = null
-        releaseLocks()
-        if (ProxyState.status.value != Status.ERROR) ProxyState.status.value = Status.STOPPED
-        ProxyTileService.refresh(this)
+        lifecycle.execute {
+            unwatchNetwork()
+            tick?.cancel(false)
+            try {
+                server?.stop()
+            } finally {
+                server = null
+                releaseLocks()
+                if (ProxyState.status.value != Status.ERROR) ProxyState.status.value = Status.STOPPED
+                ProxyTileService.refresh(this)
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -215,6 +221,12 @@ class ProxyService : Service() {
     }
 
     companion object {
+        // Общая очередь для всех экземпляров службы: новый запуск ждёт закрытия старого порта.
+        // Закрытие TLS-сокетов также всегда происходит вне главного потока.
+        private val lifecycle = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "proxy-lifecycle").apply { isDaemon = true }
+        }
+
         private const val NOTIF_ID = 1
         private const val ACTION_STOP = "com.aveharrisan.tgwsproxy.STOP"
         private const val ACTION_RESTART = "com.aveharrisan.tgwsproxy.RESTART"

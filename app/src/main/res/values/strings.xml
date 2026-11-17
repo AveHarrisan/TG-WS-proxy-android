@@ -69,7 +69,7 @@
     <string name="label_worker">Домены Cloudflare Worker</string>
     <string name="hint_worker">Через запятую, например name.user.workers.dev. Пробуются первыми</string>
     <string name="label_nosecure">Без TLS (порт 80)</string>
-    <string name="hint_nosecure">Для CF-прокси и Worker. Включайте, только если 443 закрыт</string>
+    <string name="hint_nosecure">Для CF-прокси и Worker. Включено по умолчанию. Данные Telegram остаются зашифрованы MTProto</string>
     <string name="label_pool">Пул WS-соединений на датацентр</string>
     <string name="hint_pool">Заранее открытые соединения ускоряют подключение. 0 — выключить</string>
     <string name="label_pool_age">Заменять готовые подключения</string>

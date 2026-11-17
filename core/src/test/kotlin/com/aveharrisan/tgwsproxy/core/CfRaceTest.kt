@@ -53,6 +53,29 @@ class CfRaceTest {
     }
 
     @Test
+    fun lateConnectionIsClosedEvenWhenAttemptIgnoresCancellation() {
+        val made = Conn("late")
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val returned = java.util.concurrent.CountDownLatch(1)
+        try {
+            assertNull(CfRace.connect(listOf("late"), budgetMs = 100) {
+                started.countDown()
+                while (true) {
+                    try { release.await(); break } catch (_: InterruptedException) { }
+                }
+                returned.countDown()
+                made
+            })
+            assertTrue(started.await(1, java.util.concurrent.TimeUnit.SECONDS))
+        } finally { release.countDown() }
+        assertTrue(returned.await(1, java.util.concurrent.TimeUnit.SECONDS))
+        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(1)
+        while (!made.closed && System.nanoTime() < deadline) Thread.yield()
+        assertTrue(made.closed, "позднее TLS-соединение осталось открытым")
+    }
+
+    @Test
     fun allFailReturnsNull() {
         assertNull(CfRace.connect(listOf("a", "b")) { throw IOException("down") })
     }

@@ -23,11 +23,14 @@ object CfRace {
         }
     }
 
-    fun <T : AutoCloseable> connect(candidates: List<String>, attempt: (String) -> T): Pair<String, T>? {
+    fun <T : AutoCloseable> connect(candidates: List<String>, budgetMs: Long = TOTAL_BUDGET_MS, attempt: (String) -> T): Pair<String, T>? {
         if (candidates.isEmpty()) return null
         val cs = ExecutorCompletionService<Pair<String, T>>(exec)
         val running = ArrayList<Future<Pair<String, T>>>()
-        val deadline = System.currentTimeMillis() + TOTAL_BUDGET_MS
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs)
+        val gate = Any()
+        var finished = false
+        val produced = ArrayList<Pair<String, T>>()
         var next = 0
         var inFlight = 0
         fun launch() {
@@ -36,8 +39,15 @@ object CfRace {
                 try {
                     val r = attempt(d)
                     Balancer.reportSuccess(d)
-                    d to r
+                    synchronized(gate) {
+                        if (finished) {
+                            runCatching { r.close() }
+                            throw java.util.concurrent.CancellationException("Гонка завершена")
+                        }
+                        (d to r).also { produced += it }
+                    }
                 } catch (e: Exception) {
+                    if (e is InterruptedException || e is java.util.concurrent.CancellationException || Thread.currentThread().isInterrupted) throw e
                     Balancer.reportFailure(d)
                     Log.d("CF-прокси ${DomainCensor.apply(d)} не ответил: ${e.javaClass.simpleName}: ${e.message}")
                     throw e
@@ -47,27 +57,29 @@ object CfRace {
         }
         launch()
         var winner: Pair<String, T>? = null
-        while (winner == null && inFlight > 0) {
-            val left = deadline - System.currentTimeMillis()
-            if (left <= 0) break
-            // Ждём ответа; не дождались за шаг — запускаем следующий домен параллельно.
-            val wait = if (next < candidates.size && inFlight < PARALLEL) minOf(STAGGER_MS, left) else left
-            val f = cs.poll(wait, TimeUnit.MILLISECONDS)
-            if (f == null) {
-                if (next < candidates.size && inFlight < PARALLEL) launch()
-                continue
+        try {
+            while (winner == null && inFlight > 0) {
+                val left = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime())
+                if (left <= 0) break
+                // Ждём ответа; не дождались за шаг — запускаем следующий домен параллельно.
+                val wait = if (next < candidates.size && inFlight < PARALLEL) minOf(STAGGER_MS, left) else left
+                val f = cs.poll(wait, TimeUnit.MILLISECONDS)
+                if (f == null) {
+                    if (next < candidates.size && inFlight < PARALLEL) launch()
+                    continue
+                }
+                inFlight--
+                winner = runCatching { f.get() }.getOrNull()
+                if (winner == null && next < candidates.size) launch()
             }
-            inFlight--
-            winner = runCatching { f.get() }.getOrNull()
-            if (winner == null && next < candidates.size) launch()
-        }
-        // Остальные попытки не нужны: доделавшие — закрываем, недоделавшие — отменяем.
-        running.forEach { fut ->
-            if (winner != null && fut.isDone && runCatching { fut.get() }.getOrNull() === winner) return@forEach
-            if (fut.isDone) runCatching { fut.get().second.close() } else {
-                fut.cancel(true)
-                exec.execute { runCatching { fut.get(10, TimeUnit.SECONDS).second.close() } }
+        } finally {
+            // Попытка может игнорировать interrupt внутри TLS. Она сама закроет поздний результат.
+            val losers = synchronized(gate) {
+                finished = true
+                produced.filter { it !== winner }.toList()
             }
+            running.forEach { if (!it.isDone) it.cancel(true) }
+            losers.forEach { runCatching { it.second.close() } }
         }
         return winner
     }

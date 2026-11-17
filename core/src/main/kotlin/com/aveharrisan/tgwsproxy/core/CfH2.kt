@@ -197,7 +197,9 @@ internal class H2Request(val body: ByteArray, val replay: Boolean, val packet: R
 }
 
 /** Общий пул: одна «полоса» (lane) на хост kwsN.<домен>, внутри — одно HTTP/2-соединение. */
-internal class CfH2Pool {
+internal class CfH2Pool(
+    private val probe: (H2Lane, Long) -> Unit = { lane, timeout -> lane.preflight(timeout) },
+) {
     private val exec = Executors.newCachedThreadPool { r ->
         Thread(r, "h2-req").apply {
             isDaemon = true
@@ -237,42 +239,46 @@ internal class CfH2Pool {
         val now = CfH2.nowMs()
         if (now < (setupRetryAfter[dc] ?: Long.MIN_VALUE)) return null
         if (dc !in Proto.DC_DEFAULT_IPS) return null
-        val deadline = now + CfH2.SETUP_TIMEOUT_MS
-        for (base in Balancer.domainsForDc(dc)) {
-            if (CfH2.nowMs() >= deadline) {
-                setupRetryAfter[dc] = CfH2.nowMs() + CfH2.DOMAIN_COOLDOWN_MS
-                Log.w("[$label] H2 DC$dc: подключение не успело за ${CfH2.SETUP_TIMEOUT_MS / 1000} с — медиа пока через WS")
-                return null
+        // Один зависший домен не должен занимать весь срок настройки медиа.
+        synchronized(locks.getOrPut("dc:$dc") { Any() }) {
+            if (closed || CfH2.nowMs() < (setupRetryAfter[dc] ?: Long.MIN_VALUE)) return null
+            val candidates = Balancer.domainsForDc(dc).filter { base ->
+                val host = "kws$dc.$base"
+                val lane = lanes[host]
+                CfH2.nowMs() >= maxOf(failedUntil[host] ?: Long.MIN_VALUE, lane?.failedUntil ?: Long.MIN_VALUE)
             }
-            val host = "kws$dc.$base"
-            synchronized(locks.getOrPut(host) { Any() }) {
-                if (closed) return null
-                var lane = lanes[host]
-                val t = CfH2.nowMs()
-                if (t < maxOf(failedUntil[host] ?: Long.MIN_VALUE, lane?.failedUntil ?: Long.MIN_VALUE)) return@synchronized
-                if (lane == null) {
+            var lane = candidates.asSequence().mapNotNull { lanes["kws$dc.$it"] }
+                .firstOrNull { !it.closed }
+            if (lane == null) {
+                val won = CfRace.connect(candidates, budgetMs = CfH2.SETUP_TIMEOUT_MS) { base ->
+                    val host = "kws$dc.$base"
                     val fresh = H2Lane(this, host, nextLane.incrementAndGet())
                     try {
-                        fresh.preflight(deadline - t)
+                        probe(fresh, 2500)
+                        fresh
                     } catch (e: Exception) {
+                        fresh.close()
                         Stats.h2Errors.incrementAndGet()
                         failedUntil[host] = CfH2.nowMs() + CfH2.DOMAIN_COOLDOWN_MS
-                        Log.d("[$label] H2 ${DomainCensor.apply(host)} не подошёл: ${e.javaClass.simpleName}: ${e.message}")
-                        return@synchronized
+                        throw e
                     }
-                    if (closed) return null
-                    lanes[host] = fresh
-                    lane = fresh
                 }
-                val ch = H2Channel(lane, nextChannel.incrementAndGet(), label).also { it.submitter = ::submit }
-                if (Balancer.updateDomainForDc(dc, base))
-                    Log.i("[$label] DC$dc media CF-прокси: активный домен сменён на ${DomainCensor.apply(base)}")
-                Log.d("[$label] DC$dc media -> HTTP/2 lane=${lane.id} channel=${ch.id} host=${DomainCensor.apply(host)} channels=${lane.channelCount}")
-                return ch
+                if (won == null) {
+                    setupRetryAfter[dc] = CfH2.nowMs() + CfH2.DOMAIN_COOLDOWN_MS
+                    Log.d("[$label] H2 DC$dc: ни один домен не подошёл — медиа через WS")
+                    return null
+                }
+                lane = won.second
+                if (closed) { lane.close(); return null }
+                lanes.put(lane.host, lane)?.close()
+                if (Balancer.updateDomainForDc(dc, won.first))
+                    Log.i("[$label] DC$dc media CF-прокси: активный домен сменён на ${DomainCensor.apply(won.first)}")
             }
+            if (closed) return null
+            val ch = H2Channel(lane, nextChannel.incrementAndGet(), label).also { it.submitter = ::submit }
+            Log.d("[$label] DC$dc media -> HTTP/2 lane=${lane.id} channel=${ch.id} host=${DomainCensor.apply(lane.host)} channels=${lane.channelCount}")
+            return ch
         }
-        Log.d("[$label] H2 DC$dc: ни один домен не подошёл — медиа через WS")
-        return null
     }
 
     fun close() {
@@ -286,7 +292,7 @@ internal class CfH2Pool {
 }
 
 /** Все каналы к одному хосту: общий лимит запросов/байт, общий отказ домена на 30 с. */
-internal class H2Lane(private val pool: CfH2Pool, val host: String, val id: Int) {
+internal class H2Lane(private val pool: CfH2Pool, val host: String, val id: Int) : AutoCloseable {
     @Volatile var failedUntil = Long.MIN_VALUE
     @Volatile var closed = false
     private val lock = ReentrantLock()
@@ -393,7 +399,7 @@ internal class H2Lane(private val pool: CfH2Pool, val host: String, val id: Int)
         }
     }
 
-    fun close() {
+    override fun close() {
         closed = true
         lock.withLock { capacity.signalAll() }
         channels.toList().forEach { it.close() }
